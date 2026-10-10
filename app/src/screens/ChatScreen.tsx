@@ -144,15 +144,16 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           <Ionicons name="chevron-back" size={26} color={theme.text} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
-              {contact.name}
+          <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+            {contact.name}
+          </Text>
+          <View style={styles.subtitle}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor[status] }]} />
+            <Text style={[styles.subtitleText, { color: theme.muted }]} numberOfLines={1}>
+              {statusLabel[status]}
+              {account ? `  ·  ${account}` : ''}
             </Text>
-            {account && (
-              <Text style={[styles.accountTag, { color: theme.accent, borderColor: theme.accent }]}>{account}</Text>
-            )}
           </View>
-          <Text style={{ color: statusColor[status], fontSize: 12 }}>{statusLabel[status]}</Text>
         </View>
         <Pressable onPress={showScreen} hitSlop={12}>
           <Ionicons name="desktop-outline" size={20} color={theme.muted} />
@@ -301,20 +302,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
-  accountTag: {
-    fontSize: 11,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    overflow: 'hidden',
-  },
+  headerCenter: { flex: 1, alignItems: 'center', gap: 3 },
+  headerTitle: { fontSize: 17, fontWeight: '600' },
+  subtitle: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  subtitleText: { fontSize: 12 },
   banner: { padding: 10, alignItems: 'center' },
   bannerText: { color: '#fff', fontWeight: '600' },
   screen: { maxHeight: '45%', borderBottomWidth: StyleSheet.hairlineWidth },
