@@ -35,7 +35,8 @@ def _text_of(content) -> str:
 
 def to_message(entry: dict) -> dict | None:
     kind = entry.get('type')
-    if kind not in ('user', 'assistant') or entry.get('isMeta'):
+    # isCompactSummary: the summary Claude Code injects after compacting, not something the user said.
+    if kind not in ('user', 'assistant') or entry.get('isMeta') or entry.get('isCompactSummary'):
         return None
     content = (entry.get('message') or {}).get('content')
     if kind == 'user' and isinstance(content, list) and any(

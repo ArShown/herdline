@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 /** Run `task` now and every `intervalMs` while the app is in the foreground. */
 export function usePolling(task: () => Promise<void> | void, intervalMs: number) {
@@ -17,8 +17,11 @@ export function usePolling(task: () => Promise<void> | void, intervalMs: number)
       if (timer) clearInterval(timer);
       timer = null;
     };
-    if (AppState.currentState === 'active') start();
-    const sub = AppState.addEventListener('change', (state) => (state === 'active' ? start() : stop()));
+    // iOS may report 'unknown' at launch; only a backgrounded app stops polling.
+    // The web build is a preview, so it ignores tab visibility.
+    const foreground = (state: string) => Platform.OS === 'web' || state !== 'background';
+    if (foreground(AppState.currentState)) start();
+    const sub = AppState.addEventListener('change', (state) => (foreground(state) ? start() : stop()));
     return () => {
       stop();
       sub.remove();

@@ -110,6 +110,7 @@ class ApiTest(unittest.TestCase):
                                 {'type': 'tool_use', 'name': 'Bash'}], 'a-02'),
             entry('user', [{'type': 'tool_result', 'content': 'out'}], 'u-03'),
             entry('user', 'meta', 'u-04', isMeta=True),
+            entry('user', 'This session is being continued', 'u-07', isCompactSummary=True),
             entry('user', '<command-name>/x</command-name>', 'u-05'),
             'not json',
             entry('assistant', [{'type': 'text', 'text': 'answer'}], 'a-06'),
