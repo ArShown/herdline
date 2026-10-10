@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Theme } from './theme';
 
-// Words the user types often; tapping one puts it in the message box.
-export const SHORTCUTS = ['早上好', 'lgtm', 'welldone'];
+// Words the user types often, most used first; tapping one puts it in the message box.
+export const SHORTCUTS = ['好', '可以', 'lgtm', 'welldone', '繼續', '我回來了', '夜哨', '早上好'];
 
 type Props = {
   visible: boolean;
@@ -52,7 +52,7 @@ export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShor
           <Ionicons name="flash-outline" size={14} color={theme.muted} />
           <Text style={[styles.section, { color: theme.muted }]}>快捷</Text>
         </View>
-        <View style={styles.shortcuts}>
+        <ScrollView style={styles.shortcuts} contentContainerStyle={styles.shortcutsContent}>
           {SHORTCUTS.map((word) => (
             <Pressable
               key={word}
@@ -62,10 +62,11 @@ export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShor
                 onShortcut(word);
               }}
             >
-              <Text style={{ color: theme.text, fontSize: 15 }}>{word}</Text>
+              <Text style={{ color: theme.text, fontSize: 16 }}>{word}</Text>
+              <Ionicons name="arrow-up-circle-outline" size={20} color={theme.muted} />
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
@@ -84,6 +85,14 @@ const styles = StyleSheet.create({
   optionText: { fontSize: 16 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 20, marginBottom: 8 },
   section: { fontSize: 13 },
-  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  shortcuts: { maxHeight: 320 },
+  shortcutsContent: { gap: 8 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
 });
