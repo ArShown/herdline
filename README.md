@@ -10,7 +10,7 @@ Chat with the Claude Code sessions running in your [herdr](https://herdr.dev) pa
 ```sh
 mkdir -p ~/.config/herdline && cp bridge/config.example.toml ~/.config/herdline/config.toml
 python3 -m herdline_bridge token      # run inside bridge/; prints the phone token once, stores only its hash
-pm2 start ecosystem.config.cjs
+HERDLINE_PYTHON=$(command -v python3.11) pm2 start ecosystem.config.cjs && pm2 save
 ```
 
 Keep it bound to `127.0.0.1` and expose it to your tailnet with HTTPS: `tailscale serve --bg 8787`. The app then connects to `https://<mac>.<tailnet>.ts.net`.

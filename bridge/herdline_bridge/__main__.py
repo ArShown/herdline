@@ -9,6 +9,9 @@ import json
 import secrets
 import sys
 
+if sys.version_info < (3, 11):
+    sys.exit('herdline bridge needs Python 3.11+')
+
 from . import config as config_mod
 from .api import Api
 from .contacts import record_handoff

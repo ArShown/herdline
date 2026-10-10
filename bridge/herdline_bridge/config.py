@@ -6,12 +6,18 @@ from pathlib import Path
 DEFAULT_PATH = Path(os.environ.get('HERDLINE_CONFIG', '~/.config/herdline/config.toml')).expanduser()
 
 
+def _claude_dirs() -> list[Path]:
+    # ~/.claude plus any ~/.claude-* used as CLAUDE_CONFIG_DIR for another account.
+    home = Path.home()
+    return [d for d in [home / '.claude', *sorted(home.glob('.claude-*'))] if (d / 'projects').is_dir()]
+
+
 @dataclass
 class Config:
     host: str = '127.0.0.1'
     port: int = 8787
     # Claude Code config directories whose projects/ hold session transcripts.
-    config_dirs: list[Path] = field(default_factory=lambda: [Path('~/.claude').expanduser()])
+    config_dirs: list[Path] = field(default_factory=_claude_dirs)
     # Where the status line writes <session_id>.json with used_percentage.
     context_dir: Path = Path('~/.claude/state/ctx').expanduser()
     state_dir: Path = Path('~/.local/state/herdline').expanduser()

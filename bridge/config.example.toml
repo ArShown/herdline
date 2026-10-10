@@ -5,7 +5,8 @@ host = "127.0.0.1"
 port = 8787
 
 # Claude Code config directories; transcripts are read from <dir>/projects.
-config_dirs = ["~/.claude"]
+# Default: ~/.claude and every ~/.claude-* that has a projects/ folder.
+# config_dirs = ["~/.claude", "~/.claude-work"]
 
 # Where the status line script writes <session_id>.json with used_percentage.
 context_dir = "~/.claude/state/ctx"
