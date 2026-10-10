@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Theme } from './theme';
 
 // Words the user types often, most used first; tapping one puts it in the message box.
-export const SHORTCUTS = ['好', '可以', 'lgtm', 'welldone', '繼續', '我回來了', '夜哨', '早上好'];
+export const SHORTCUTS = ['好', 'lgtm', 'welldone', '繼續', '我回來了', '夜哨', '早上好'];
 
 type Props = {
   visible: boolean;
