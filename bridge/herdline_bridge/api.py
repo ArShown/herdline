@@ -1,6 +1,9 @@
 """Request handling, kept apart from the HTTP server so it can be tested directly."""
 import hashlib
 import hmac
+import json
+import secrets
+from pathlib import Path
 from urllib.parse import unquote
 
 from . import contacts as contacts_mod
@@ -29,6 +32,8 @@ class Api:
 
     def handle(self, method: str, path: str, query: dict, body: dict | None) -> tuple[int, dict]:
         parts = [unquote(p) for p in path.strip('/').split('/')]
+        if parts == ['api', 'spaces'] and method == 'POST':
+            return self.create_space()
         if parts[:2] != ['api', 'contacts']:
             return 404, {'error': 'not_found'}
         if len(parts) == 2 and method == 'GET':
@@ -94,3 +99,34 @@ class Api:
             return 400, {'error': 'key_not_allowed', 'allowed': sorted(ALLOWED_KEYS)}
         self.herdr.send_keys(contact.pane, keys)
         return 200, {'sent': keys}
+
+    def _pick_account(self) -> str | None:
+        """The account with the most weekly quota left, per the usage files the status line writes."""
+        used = {}
+        for name, path in self.config.usage_files.items():
+            try:
+                used[name] = json.loads(path.read_text())['seven_day']['used_percentage']
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        candidates = [n for n in self.config.accounts if n in used]
+        if candidates:
+            return min(candidates, key=lambda n: used[n])
+        return next(iter(self.config.accounts), None)
+
+    def create_space(self) -> tuple[int, dict]:
+        """Open a new space in the configured folder; the bridge picks the name and account."""
+        if self.config.space_cwd is None:
+            return 400, {'error': 'space_cwd_not_set'}
+        labels = {w.get('label') for w in self.herdr.workspaces()}
+        number = 1
+        while f'Space {number}' in labels:
+            number += 1
+        name = f'Space {number}'
+        account = self._pick_account()
+        env = {}
+        config_dir = self.config.accounts.get(account) if account else None
+        if config_dir and config_dir != Path.home() / '.claude':
+            env['CLAUDE_CONFIG_DIR'] = str(config_dir)
+        _, pane = self.herdr.create_workspace(str(self.config.space_cwd), name, env)
+        status = self.herdr.start_claude(f'space-{number}-{secrets.token_hex(2)}', pane, self.config.claude_args)
+        return 201, {'id': name, 'status': status, 'account': account}

@@ -23,6 +23,17 @@ class Config:
     state_dir: Path = Path('~/.local/state/herdline').expanduser()
     # Workspace label -> name shown on the phone.
     aliases: dict[str, str] = field(default_factory=dict)
+    # Folder every space opened from the phone starts in; unset disables opening spaces.
+    space_cwd: Path | None = None
+    # Account name -> JSON with seven_day.used_percentage; a new space uses the account with most left.
+    usage_files: dict[str, Path] = field(default_factory=dict)
+    # Arguments for `claude` when the phone opens a new space.
+    claude_args: list[str] = field(default_factory=lambda: ['--permission-mode', 'auto'])
+
+    @property
+    def accounts(self) -> dict[str, Path]:
+        """Account name shown on the phone -> Claude Code config directory."""
+        return {d.name.lstrip('.'): d for d in self.config_dirs}
 
     @property
     def token_file(self) -> Path:
@@ -46,5 +57,10 @@ def load(path: Path = DEFAULT_PATH) -> Config:
             setattr(config, key, Path(raw[key]).expanduser())
     if 'config_dirs' in raw:
         config.config_dirs = [Path(p).expanduser() for p in raw['config_dirs']]
+    if 'space_cwd' in raw:
+        config.space_cwd = Path(raw['space_cwd']).expanduser()
+    config.usage_files = {k: Path(v).expanduser() for k, v in raw.get('usage_files', {}).items()}
+    if 'claude_args' in raw:
+        config.claude_args = list(raw['claude_args'])
     config.aliases = dict(raw.get('aliases', {}))
     return config

@@ -25,6 +25,8 @@ class FakeHerdr(Herdr):
         self.prompts = []
         self.keys = []
         self.blocked = set()
+        self.created = []
+        self.started = []
 
     def agents(self):
         return self._agents
@@ -42,6 +44,14 @@ class FakeHerdr(Herdr):
 
     def send_keys(self, pane, keys):
         self.keys.append((pane, keys))
+
+    def create_workspace(self, cwd, label, env):
+        self.created.append((cwd, label, env))
+        return 'w9', 'w9:p1'
+
+    def start_claude(self, name, pane, claude_args):
+        self.started.append((name, pane, claude_args))
+        return 'idle'
 
 
 def entry(kind, content, uuid, **extra):
@@ -152,6 +162,35 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.api.handle('POST', '/api/contacts/proj_web/messages', {}, {'text': ' '})[0], 400)
         self.assertEqual(self.api.handle('GET', '/api/contacts/nope/messages', {}, None)[0], 404)
 
+
+    def test_create_space_names_itself_and_starts_claude(self):
+        self.config.space_cwd = Path(self.tmp.name)
+        self.herdr._workspaces.append({'workspace_id': 'w3', 'label': 'Space 1'})
+        status, body = self.api.handle('POST', '/api/spaces', {}, None)
+        self.assertEqual((status, body['id']), (201, 'Space 2'))
+        self.assertEqual(self.herdr.created[0][:2], (self.tmp.name, 'Space 2'))
+        name, pane, args = self.herdr.started[0]
+        self.assertTrue(name.startswith('space-2-'))
+        self.assertEqual((pane, args), ('w9:p1', ['--permission-mode', 'auto']))
+
+    def test_create_space_uses_account_with_most_quota_left(self):
+        self.config.space_cwd = Path(self.tmp.name)
+        other = Path(self.tmp.name) / '.claude-b'
+        self.config.config_dirs.append(other)
+        usage = Path(self.tmp.name) / 'usage'
+        usage.mkdir()
+        (usage / 'a.json').write_text('{"seven_day": {"used_percentage": 80}}')
+        (usage / 'b.json').write_text('{"seven_day": {"used_percentage": 20}}')
+        self.config.usage_files = {'claude': usage / 'a.json', 'claude-b': usage / 'b.json'}
+        status, body = self.api.handle('POST', '/api/spaces', {}, None)
+        self.assertEqual((status, body['account']), (201, 'claude-b'))
+        self.assertEqual(self.herdr.created[0][2], {'CLAUDE_CONFIG_DIR': str(other)})
+
+    def test_create_space_falls_back_to_first_account_and_needs_cwd(self):
+        self.assertEqual(self.api.handle('POST', '/api/spaces', {}, None)[0], 400)
+        self.config.space_cwd = Path(self.tmp.name)
+        status, body = self.api.handle('POST', '/api/spaces', {}, None)
+        self.assertEqual((status, body['account']), (201, 'claude'))
 
 if __name__ == '__main__':
     unittest.main()

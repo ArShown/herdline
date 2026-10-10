@@ -13,6 +13,17 @@ context_dir = "~/.claude/state/ctx"
 
 state_dir = "~/.local/state/herdline"
 
+# Folder every space opened from the phone starts in; leave unset to disable opening spaces.
+# space_cwd = "~/projects"
+
+# A new space uses the account with the lowest weekly usage, read from these files
+# (JSON with seven_day.used_percentage, e.g. saved by your status line script).
+# [usage_files]
+# claude = "~/.claude/state/usage/claude.json"
+
+# Arguments for `claude` in a space opened from the phone.
+# claude_args = ["--permission-mode", "auto"]
+
 # herdr workspace label = name shown on the phone
 [aliases]
 # my_api = "API"

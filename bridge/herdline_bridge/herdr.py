@@ -42,3 +42,21 @@ class Herdr:
 
     def send_keys(self, pane: str, keys: list[str]) -> None:
         self._run(['agent', 'send-keys', pane, *keys])
+
+    def create_workspace(self, cwd: str, label: str, env: dict[str, str]) -> tuple[str, str]:
+        args = ['workspace', 'create', '--cwd', cwd, '--label', label, '--no-focus']
+        for key, value in env.items():
+            args += ['--env', f'{key}={value}']
+        result = self._json(*args)
+        return result['workspace']['workspace_id'], result['root_pane']['pane_id']
+
+    def start_claude(self, name: str, pane: str, claude_args: list[str]) -> str:
+        """Start Claude Code in the pane; returns its status (blocked if a dialog is waiting)."""
+        try:
+            agent = self._json('agent', 'start', name, '--kind', 'claude', '--pane', pane, '--', *claude_args)['agent']
+            return agent.get('agent_status', 'unknown')
+        except HerdrError as e:
+            # e.g. the folder-trust dialog; the phone answers it from the screen view.
+            if e.code == 'agent_not_ready':
+                return 'blocked'
+            raise

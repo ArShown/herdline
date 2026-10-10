@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { api, ApiError, type Contact, type Server } from '../api';
 import { formatTime } from '../format';
 import { statusColor, statusLabel, useTheme } from '../theme';
@@ -31,13 +31,35 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
 
   usePolling(load, 10_000);
 
+  const [creating, setCreating] = useState(false);
+  const createSpace = async () => {
+    setCreating(true);
+    try {
+      const { id, status } = await api.createSpace(server);
+      onOpen({ id, name: id, status, title: null, context_used: null, preview: null });
+    } catch {
+      setError('開不起新的 space');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { borderColor: theme.border }]}>
         <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
-        <Pressable onPress={onLogout} hitSlop={12}>
-          <Text style={{ color: theme.accent }}>設定</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable onPress={onLogout} hitSlop={12}>
+            <Text style={{ color: theme.accent }}>設定</Text>
+          </Pressable>
+          {creating ? (
+            <ActivityIndicator />
+          ) : (
+            <Pressable onPress={createSpace} hitSlop={12}>
+              <Text style={{ color: theme.accent, fontSize: 24, lineHeight: 26 }}>＋</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
       {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
       <FlatList
@@ -97,6 +119,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: { fontSize: 20, fontWeight: '600' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   error: { padding: 12, textAlign: 'center' },
   empty: { padding: 32, textAlign: 'center' },
   row: { flexDirection: 'row', gap: 12, padding: 14, borderBottomWidth: StyleSheet.hairlineWidth },
