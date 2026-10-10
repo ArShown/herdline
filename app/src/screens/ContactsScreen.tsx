@@ -16,12 +16,15 @@ type Props = {
 export function ContactsScreen({ server, onOpen, onLogout }: Props) {
   const theme = useTheme();
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [usage, setUsage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setContacts(await api.contacts(server));
+      const data = await api.contacts(server);
+      setContacts(data.contacts);
+      setUsage(data.usage);
       setError(null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) onLogout();
@@ -61,6 +64,15 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
           )}
         </View>
       </View>
+      {usage && (
+        <View style={[styles.usage, { borderColor: theme.border }]}>
+          {usage.split('│').map((part) => (
+            <Text key={part} style={[styles.usageItem, { color: theme.muted, backgroundColor: theme.surface }]}>
+              {part.trim()}
+            </Text>
+          ))}
+        </View>
+      )}
       {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
       <FlatList
         data={contacts}
@@ -119,6 +131,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: { fontSize: 20, fontWeight: '600' },
+  usage: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  usageItem: { fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   error: { padding: 12, textAlign: 'center' },
   empty: { padding: 32, textAlign: 'center' },

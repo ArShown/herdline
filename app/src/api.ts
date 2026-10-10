@@ -41,7 +41,7 @@ async function call<T>(server: Server, method: 'GET' | 'POST', path: string, bod
 const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id)}`;
 
 export const api = {
-  contacts: (s: Server) => call<{ contacts: Contact[] }>(s, 'GET', '/api/contacts').then((d) => d.contacts),
+  contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null }>(s, 'GET', '/api/contacts'),
   messages: (s: Server, id: string, limit = 50) =>
     call<{ status: Status; session_id: string; messages: Message[] }>(s, 'GET', `${contactPath(id)}/messages?limit=${limit}`),
   send: (s: Server, id: string, text: string) => call(s, 'POST', `${contactPath(id)}/messages`, { text }),

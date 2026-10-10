@@ -27,6 +27,8 @@ class Config:
     space_cwd: Path | None = None
     # Account name -> JSON with seven_day.used_percentage; a new space uses the account with most left.
     usage_files: dict[str, Path] = field(default_factory=dict)
+    # Command whose one-line output is shown above the list (e.g. the one in herdr's tab_bar_right).
+    usage_command: str | None = None
     # Arguments for `claude` when the phone opens a new space.
     claude_args: list[str] = field(default_factory=lambda: ['--permission-mode', 'auto'])
 
@@ -60,6 +62,7 @@ def load(path: Path = DEFAULT_PATH) -> Config:
     if 'space_cwd' in raw:
         config.space_cwd = Path(raw['space_cwd']).expanduser()
     config.usage_files = {k: Path(v).expanduser() for k, v in raw.get('usage_files', {}).items()}
+    config.usage_command = raw.get('usage_command')
     if 'claude_args' in raw:
         config.claude_args = list(raw['claude_args'])
     config.aliases = dict(raw.get('aliases', {}))

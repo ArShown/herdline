@@ -3,6 +3,9 @@ import hashlib
 import hmac
 import json
 import secrets
+import shlex
+import subprocess
+import time
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -12,6 +15,8 @@ from .config import Config
 from .herdr import Herdr, HerdrError
 
 # Keys the phone may press in a pane: enough to answer a confirmation dialog.
+USAGE_TTL = 60
+
 ALLOWED_KEYS = {'enter', 'esc', 'up', 'down', 'tab', 'y', 'n', *map(str, range(1, 10))}
 
 
@@ -19,6 +24,7 @@ class Api:
     def __init__(self, config: Config, herdr: Herdr | None = None):
         self.config = config
         self.herdr = herdr or Herdr()
+        self._usage: tuple[float, str | None] | None = None
 
     def authorized(self, header: str | None) -> bool:
         try:
@@ -37,7 +43,7 @@ class Api:
         if parts[:2] != ['api', 'contacts']:
             return 404, {'error': 'not_found'}
         if len(parts) == 2 and method == 'GET':
-            return 200, {'contacts': self.list_contacts()}
+            return 200, {'contacts': self.list_contacts(), 'usage': self.usage()}
         if len(parts) != 4:
             return 404, {'error': 'not_found'}
         contact = self._find(parts[2])
@@ -53,6 +59,21 @@ class Api:
         if route == ('POST', 'keys'):
             return self.keys(contact, (body or {}).get('keys', []))
         return 404, {'error': 'not_found'}
+
+    def usage(self) -> str | None:
+        """Output of usage_command, refreshed at most once a minute."""
+        if not self.config.usage_command:
+            return None
+        now = time.monotonic()
+        if self._usage and now - self._usage[0] < USAGE_TTL:
+            return self._usage[1]
+        try:
+            done = subprocess.run(shlex.split(self.config.usage_command), capture_output=True, text=True, timeout=10)
+            text = done.stdout.strip() or None
+        except (OSError, subprocess.TimeoutExpired):
+            text = self._usage[1] if self._usage else None
+        self._usage = (now, text)
+        return text
 
     def _find(self, contact_id: str):
         for contact in contacts_mod.resolve_all(self.herdr, self.config):

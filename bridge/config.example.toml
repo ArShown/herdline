@@ -21,6 +21,10 @@ state_dir = "~/.local/state/herdline"
 # [usage_files]
 # claude = "~/.claude/state/usage/claude.json"
 
+# Command whose one-line output is shown above the list, e.g. the same one as herdr's tab_bar_right.
+# Parts separated by " │ " show as separate chips.
+# usage_command = "~/bin/ai-usage"
+
 # Arguments for `claude` in a space opened from the phone.
 # claude_args = ["--permission-mode", "auto"]
 

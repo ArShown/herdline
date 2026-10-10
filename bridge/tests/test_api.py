@@ -214,5 +214,15 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(len(self.herdr.renamed), 1)
 
 
+    def test_usage_line_is_cached(self):
+        _, body = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertIsNone(body['usage'])
+        counter = Path(self.tmp.name) / 'count'
+        self.config.usage_command = f"sh -c 'echo x >> {counter}; echo \"A 6% │ B 11%\"'"
+        self.assertEqual(self.api.handle('GET', '/api/contacts', {}, None)[1]['usage'], 'A 6% │ B 11%')
+        self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertEqual(counter.read_text().count('x'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
