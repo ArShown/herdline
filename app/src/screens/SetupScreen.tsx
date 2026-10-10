@@ -4,9 +4,12 @@ import { api, ApiError, type Server } from '../api';
 import { saveServer } from '../settings';
 import { useTheme } from '../theme';
 
+// Set in app/.env.local so the address is fixed in the build; the token is always typed on the phone.
+const FIXED_URL = process.env.EXPO_PUBLIC_HERDLINE_URL ?? '';
+
 export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
   const theme = useTheme();
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(FIXED_URL);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,16 +33,18 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
   return (
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
       <Text style={[styles.title, { color: theme.text }]}>連線設定</Text>
-      <TextInput
-        style={input}
-        placeholder="https://your-mac.tailnet.ts.net"
-        placeholderTextColor={theme.muted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        value={url}
-        onChangeText={setUrl}
-      />
+      {!FIXED_URL && (
+        <TextInput
+          style={input}
+          placeholder="https://your-mac.tailnet.ts.net"
+          placeholderTextColor={theme.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          value={url}
+          onChangeText={setUrl}
+        />
+      )}
       <TextInput
         style={input}
         placeholder="金鑰"

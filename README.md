@@ -46,3 +46,9 @@ cd bridge && python3 -m unittest
 ```sh
 cd app && npm install && npm run typecheck
 ```
+
+To fix the bridge address in the build, put it in `app/.env.local` (not committed); the token is still entered once on the phone:
+
+```sh
+EXPO_PUBLIC_HERDLINE_URL=https://<mac>.<tailnet>.ts.net
+```
