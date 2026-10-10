@@ -56,5 +56,6 @@ export const api = {
     call(s, 'POST', `${contactPath(id)}/messages`, { text, images, files }),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),
   keys: (s: Server, id: string, keys: string[]) => call(s, 'POST', `${contactPath(id)}/keys`, { keys }),
+  exit: (s: Server, id: string, force = false) => call(s, 'POST', `${contactPath(id)}/exit`, { force }),
   createSpace: (s: Server) => call<{ id: string; name: string; status: Status }>(s, 'POST', '/api/spaces', {}),
 };

@@ -17,6 +17,8 @@ from .config import Config
 from .herdr import Herdr, HerdrError
 
 USAGE_TTL = 60
+EXIT_WAIT_STEPS = 10
+EXIT_WAIT_SECONDS = 0.5
 MAX_ATTACHMENTS = 6
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -75,6 +77,8 @@ class Api:
             return 200, {'text': self.herdr.screen(contact.pane)}
         if route == ('POST', 'keys'):
             return self.keys(contact, (body or {}).get('keys', []))
+        if route == ('POST', 'exit'):
+            return self.exit(contact, bool((body or {}).get('force')))
         return 404, {'error': 'not_found'}
 
     def usage(self) -> str | None:
@@ -200,6 +204,31 @@ class Api:
             return 400, {'error': 'key_not_allowed', 'allowed': sorted(ALLOWED_KEYS)}
         self.herdr.send_keys(contact.pane, keys)
         return 200, {'sent': keys}
+
+    def exit(self, contact, force: bool) -> tuple[int, dict]:
+        """End the conversation: let Claude Code quit cleanly, then close what is left of the space."""
+        if contact.status == 'working' and not force:
+            return 409, {'error': 'busy'}
+        try:
+            self.herdr.prompt(contact.pane, '/exit')
+        except HerdrError:
+            pass  # a blocked or stuck session is closed with its pane below
+        session = contact.session_id
+        for _ in range(EXIT_WAIT_STEPS):
+            if not any(a.get('agent_session', {}).get('value') == session for a in self.herdr.agents()):
+                break
+            time.sleep(EXIT_WAIT_SECONDS)
+        # Other agents (e.g. coding agents started from this space) keep running; only then keep the space.
+        others = [a for a in self.herdr.agents()
+                  if a.get('workspace_id') == contact.workspace_id and a.get('pane_id') != contact.pane]
+        if others:
+            try:
+                self.herdr.close_pane(contact.pane)
+            except HerdrError:
+                pass
+            return 200, {'closed': 'pane'}
+        self.herdr.close_workspace(contact.workspace_id)
+        return 200, {'closed': 'space'}
 
     def _pick_account(self) -> str | None:
         """The account with the most weekly quota left, per the usage files the status line writes."""

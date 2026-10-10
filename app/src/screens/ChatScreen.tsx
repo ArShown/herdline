@@ -3,9 +3,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -14,6 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
 import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
@@ -42,6 +45,9 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [screen, setScreen] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageSource | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const room = MAX_ATTACHMENTS - picked.length - files.length;
 
   const load = useCallback(async () => {
@@ -102,6 +108,20 @@ export function ChatScreen({ server, contact, onBack }: Props) {
 
   const showScreen = async () => setScreen(await api.screen(server, contact.id));
 
+  const exit = async (force: boolean) => {
+    setExiting(true);
+    try {
+      await api.exit(server, contact.id, force);
+      setMenu(false);
+      onBack();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'busy') setConfirmBusy(true);
+      else setError('結束不了');
+    } finally {
+      setExiting(false);
+    }
+  };
+
   const press = async (key: string) => {
     await api.keys(server, contact.id, [key]);
     setTimeout(() => {
@@ -155,8 +175,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             </Text>
           </View>
         </View>
-        <Pressable onPress={showScreen} hitSlop={12}>
-          <Ionicons name="desktop-outline" size={20} color={theme.muted} />
+        <Pressable onPress={() => setMenu(true)} hitSlop={12}>
+          <Ionicons name="ellipsis-horizontal" size={22} color={theme.text} />
         </Pressable>
       </View>
 
@@ -277,6 +297,46 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         </View>
       </View>
 
+      <Modal visible={menu} transparent animationType="slide" onRequestClose={() => setMenu(false)}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            setMenu(false);
+            setConfirmBusy(false);
+          }}
+        />
+        <SafeAreaView edges={['bottom']} style={[styles.menu, { backgroundColor: theme.surface }]}>
+          <View style={[styles.handle, { backgroundColor: theme.border }]} />
+          <Pressable
+            style={[styles.menuItem, { backgroundColor: theme.bg }]}
+            onPress={() => {
+              setMenu(false);
+              showScreen();
+            }}
+          >
+            <Ionicons name="desktop-outline" size={20} color={theme.text} />
+            <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
+          </Pressable>
+          {confirmBusy ? (
+            <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+              <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
+              <View style={styles.confirmRow}>
+                <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmBusy(false)}>
+                  <Text style={{ color: theme.text }}>先不要</Text>
+                </Pressable>
+                <Pressable style={[styles.confirmButton, { backgroundColor: theme.danger, borderColor: theme.danger }]} onPress={() => exit(true)}>
+                  {exiting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>結束</Text>}
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable style={[styles.menuItem, { backgroundColor: theme.bg }]} disabled={exiting} onPress={() => exit(false)}>
+              {exiting ? <ActivityIndicator /> : <Ionicons name="exit-outline" size={20} color={theme.danger} />}
+              <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
+            </Pressable>
+          )}
+        </SafeAreaView>
+      </Modal>
       <AttachSheet
         visible={sheet}
         theme={theme}
@@ -362,6 +422,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   send: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  backdrop: { flex: 1, backgroundColor: '#0006' },
+  menu: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, gap: 10 },
+  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: 6 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 15 },
+  menuText: { fontSize: 16 },
+  confirm: { borderRadius: 14, padding: 16, gap: 14 },
+  confirmRow: { flexDirection: 'row', gap: 10 },
+  confirmButton: { flex: 1, alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingVertical: 12 },
   fileChip: { maxWidth: '85%', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
   pickedFile: { width: 120, height: 64, borderRadius: 10, padding: 8, justifyContent: 'center' },
 });

@@ -28,6 +28,7 @@ class FakeHerdr(Herdr):
         self.blocked = set()
         self.created = []
         self.renamed = []
+        self.closed = []
         self.started = []
 
     def agents(self):
@@ -46,6 +47,14 @@ class FakeHerdr(Herdr):
 
     def send_keys(self, pane, keys):
         self.keys.append((pane, keys))
+
+    def close_pane(self, pane):
+        self.closed.append(('pane', pane))
+        self._agents = [a for a in self._agents if a['pane_id'] != pane]
+
+    def close_workspace(self, workspace_id):
+        self.closed.append(('space', workspace_id))
+        self._agents = [a for a in self._agents if a['workspace_id'] != workspace_id]
 
     def rename_workspace(self, workspace_id, label):
         self.renamed.append((workspace_id, label))
@@ -297,6 +306,37 @@ class ApiTest(unittest.TestCase):
         accounts = {c['id']: c['account'] for c in self.api.list_contacts()}
         self.assertEqual(accounts, {'w1': 'claude', 'w2': 'Work'})
         self.assertEqual(self.api.handle('GET', '/api/contacts/w2/messages', {}, None)[1]['account'], 'Work')
+
+
+    def test_exit_quits_claude_then_closes_space(self):
+        import herdline_bridge.api as api_mod
+        api_mod.EXIT_WAIT_STEPS = 1
+        api_mod.EXIT_WAIT_SECONDS = 0
+        # w2 has only the main session: the whole space closes.
+        status, body = self.api.handle('POST', '/api/contacts/w2/exit', {}, {})
+        self.assertEqual((status, body), (200, {'closed': 'space'}))
+        self.assertEqual(self.herdr.prompts, [('w2:p1', '/exit')])
+        self.assertEqual(self.herdr.closed, [('space', 'w2')])
+
+    def test_exit_keeps_space_when_other_agents_run_there(self):
+        import herdline_bridge.api as api_mod
+        api_mod.EXIT_WAIT_STEPS = 1
+        api_mod.EXIT_WAIT_SECONDS = 0
+        record_handoff(self.config, 's-old', 's-new')
+        self.herdr._agents[1]['agent_status'] = 'idle'
+        # w1 also holds the old session and a codex pane: only the on-duty pane closes.
+        status, body = self.api.handle('POST', '/api/contacts/w1/exit', {}, {})
+        self.assertEqual((status, body), (200, {'closed': 'pane'}))
+        self.assertEqual(self.herdr.closed, [('pane', 'w1:p2')])
+
+    def test_exit_asks_before_stopping_a_busy_session(self):
+        import herdline_bridge.api as api_mod
+        api_mod.EXIT_WAIT_STEPS = 1
+        api_mod.EXIT_WAIT_SECONDS = 0
+        record_handoff(self.config, 's-old', 's-new')  # s-new is working
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w1/exit', {}, {})[1], {'error': 'busy'})
+        self.assertEqual(self.herdr.closed, [])
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w1/exit', {}, {'force': True})[0], 200)
 
 
 if __name__ == '__main__':

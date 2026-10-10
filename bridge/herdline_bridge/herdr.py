@@ -43,6 +43,12 @@ class Herdr:
     def send_keys(self, pane: str, keys: list[str]) -> None:
         self._run(['agent', 'send-keys', pane, *keys])
 
+    def close_pane(self, pane: str) -> None:
+        self._run(['pane', 'close', pane])
+
+    def close_workspace(self, workspace_id: str) -> None:
+        self._run(['workspace', 'close', workspace_id])
+
     def rename_workspace(self, workspace_id: str, label: str) -> None:
         self._run(['workspace', 'rename', workspace_id, label])
 
