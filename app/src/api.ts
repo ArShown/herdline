@@ -5,7 +5,10 @@ export type Message = {
   role: 'user' | 'assistant';
   text: string;
   ts: string;
+  images?: string[];
 };
+
+export type OutgoingImage = { type: string; data: string };
 
 export type Contact = {
   id: string;
@@ -38,13 +41,16 @@ async function call<T>(server: Server, method: 'GET' | 'POST', path: string, bod
   return data as T;
 }
 
+export const imageUrl = (s: Server, path: string) => `${s.url.replace(/\/+$/, '')}${path}`;
+
 const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id)}`;
 
 export const api = {
   contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null }>(s, 'GET', '/api/contacts'),
   messages: (s: Server, id: string, limit = 50) =>
     call<{ status: Status; session_id: string; messages: Message[] }>(s, 'GET', `${contactPath(id)}/messages?limit=${limit}`),
-  send: (s: Server, id: string, text: string) => call(s, 'POST', `${contactPath(id)}/messages`, { text }),
+  send: (s: Server, id: string, text: string, images: OutgoingImage[] = []) =>
+    call(s, 'POST', `${contactPath(id)}/messages`, { text, images }),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),
   keys: (s: Server, id: string, keys: string[]) => call(s, 'POST', `${contactPath(id)}/keys`, { keys }),
   createSpace: (s: Server) => call<{ id: string; name: string; status: Status }>(s, 'POST', '/api/spaces', {}),

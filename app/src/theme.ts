@@ -1,27 +1,28 @@
 import { useColorScheme } from 'react-native';
 import type { Status } from './api';
 
+// Warm neutrals and a clay accent, close to the Claude apps.
 const light = {
-  bg: '#ffffff',
-  surface: '#f2f3f5',
-  text: '#111418',
-  muted: '#6b7280',
-  border: '#e5e7eb',
-  accent: '#2563eb',
-  mine: '#2563eb',
-  mineText: '#ffffff',
-  danger: '#dc2626',
+  bg: '#faf9f5',
+  surface: '#f0eee6',
+  text: '#141413',
+  muted: '#73726c',
+  border: '#e5e3da',
+  accent: '#c96442',
+  bubble: '#f0eee6',
+  code: '#f0eee6',
+  danger: '#b91c1c',
 };
 
 const dark: typeof light = {
-  bg: '#0f1115',
-  surface: '#1c1f26',
-  text: '#f3f4f6',
-  muted: '#9ca3af',
-  border: '#2a2e37',
-  accent: '#60a5fa',
-  mine: '#2563eb',
-  mineText: '#ffffff',
+  bg: '#262624',
+  surface: '#30302e',
+  text: '#f5f4ef',
+  muted: '#a3a29b',
+  border: '#3e3e3a',
+  accent: '#d97757',
+  bubble: '#141413',
+  code: '#1f1e1d',
   danger: '#f87171',
 };
 
@@ -40,7 +41,7 @@ export const statusLabel: Record<Status, string> = {
 };
 
 export const statusColor: Record<Status, string> = {
-  working: '#f59e0b',
+  working: '#d97706',
   blocked: '#dc2626',
   done: '#16a34a',
   idle: '#9ca3af',
