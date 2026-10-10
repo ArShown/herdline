@@ -28,6 +28,11 @@ state_dir = "~/.local/state/herdline"
 # Arguments for `claude` in a space opened from the phone.
 # claude_args = ["--permission-mode", "auto"]
 
+# Config directory name = account label shown on the phone
+# [account_labels]
+# claude = "Personal"
+# claude-work = "Work"
+
 # herdr workspace label = name shown on the phone
 [aliases]
 # my_api = "API"

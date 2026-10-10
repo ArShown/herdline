@@ -40,7 +40,7 @@ export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShor
             <Text style={{ color: theme.text, fontSize: 18 }}>✕</Text>
           </Pressable>
           <Text style={[styles.title, { color: theme.text }]}>加入</Text>
-          <View style={styles.close} />
+          <View style={styles.spacer} />
         </View>
         <View style={styles.row}>
           {option('圖片', '🖼', onPhotos)}
@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
   handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginTop: 8 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
   close: { width: 36, height: 36, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  spacer: { width: 36 },
   title: { fontSize: 17, fontWeight: '600' },
   row: { flexDirection: 'row', gap: 12 },
   option: { flex: 1, borderRadius: 16, paddingVertical: 20, alignItems: 'center', gap: 6 },

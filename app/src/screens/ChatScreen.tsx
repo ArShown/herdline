@@ -31,6 +31,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const theme = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>(contact.status);
+  const [account, setAccount] = useState<string | null>(contact.account ?? null);
   const [draft, setDraft] = useState('');
   const [picked, setPicked] = useState<Marked[]>([]);
   const [files, setFiles] = useState<OutgoingFile[]>([]);
@@ -46,6 +47,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       const data = await api.messages(server, contact.id);
       setMessages(data.messages);
       setStatus(data.status);
+      setAccount(data.account);
       setError(null);
     } catch {
       setError('連不上電腦');
@@ -140,9 +142,14 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           <Text style={{ color: theme.text, fontSize: 26, lineHeight: 28 }}>‹</Text>
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
-            {contact.name}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+              {contact.name}
+            </Text>
+            {account && (
+              <Text style={[styles.accountTag, { color: theme.accent, borderColor: theme.accent }]}>{account}</Text>
+            )}
+          </View>
           <Text style={{ color: statusColor[status], fontSize: 12 }}>{statusLabel[status]}</Text>
         </View>
         <Pressable onPress={showScreen} hitSlop={12}>
@@ -293,7 +300,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
+  accountTag: {
+    fontSize: 11,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   banner: { padding: 10, alignItems: 'center' },
   bannerText: { color: '#fff', fontWeight: '600' },
   screen: { maxHeight: '45%', borderBottomWidth: StyleSheet.hairlineWidth },

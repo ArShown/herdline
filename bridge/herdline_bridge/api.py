@@ -109,6 +109,7 @@ class Api:
                 'status': contact.status,
                 'title': contact.title,
                 'context_used': contacts_mod.context_used(self.config, contact.session_id),
+                'account': self.config.account_of(path),
                 'preview': self._public(last[-1], with_images=False) if last else None,
             })
         return rows
@@ -118,6 +119,7 @@ class Api:
         return {
             'status': contact.status,
             'session_id': contact.session_id,
+            'account': self.config.account_of(path),
             'messages': [self._public(m) for m in transcripts.tail(path, min(limit, 200))] if path else [],
         }
 

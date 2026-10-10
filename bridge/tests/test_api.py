@@ -287,5 +287,17 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(preview['text'], '[檔案] 報價_v2.pdf')
 
 
+    def test_account_label_follows_transcript_location(self):
+        other = Path(self.tmp.name) / '.claude-b'
+        (other / 'projects/p').mkdir(parents=True)
+        (other / 'projects/p/s-web.jsonl').write_text(entry('user', 'hi', 'u-01') + '\n')
+        self.config.config_dirs.append(other)
+        self.config.account_labels = {'claude-b': 'Work'}
+        self.write_transcript('s-old', [entry('user', 'hi', 'u-02')])
+        accounts = {c['id']: c['account'] for c in self.api.list_contacts()}
+        self.assertEqual(accounts, {'w1': 'claude', 'w2': 'Work'})
+        self.assertEqual(self.api.handle('GET', '/api/contacts/w2/messages', {}, None)[1]['account'], 'Work')
+
+
 if __name__ == '__main__':
     unittest.main()

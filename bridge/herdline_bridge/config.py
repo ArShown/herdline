@@ -32,10 +32,20 @@ class Config:
     # Arguments for `claude` when the phone opens a new space.
     claude_args: list[str] = field(default_factory=lambda: ['--permission-mode', 'auto'])
 
+    # Config directory name (e.g. "claude-b") -> label shown on the phone.
+    account_labels: dict[str, str] = field(default_factory=dict)
+
     @property
     def accounts(self) -> dict[str, Path]:
-        """Account name shown on the phone -> Claude Code config directory."""
+        """Account name -> Claude Code config directory."""
         return {d.name.lstrip('.'): d for d in self.config_dirs}
+
+    def account_of(self, transcript: Path | None) -> str | None:
+        """Label of the account whose config directory holds this transcript."""
+        for name, directory in self.accounts.items():
+            if transcript and transcript.is_relative_to(directory):
+                return self.account_labels.get(name, name)
+        return None
 
     @property
     def token_file(self) -> Path:
@@ -66,4 +76,5 @@ def load(path: Path = DEFAULT_PATH) -> Config:
     if 'claude_args' in raw:
         config.claude_args = list(raw['claude_args'])
     config.aliases = dict(raw.get('aliases', {}))
+    config.account_labels = dict(raw.get('account_labels', {}))
     return config
