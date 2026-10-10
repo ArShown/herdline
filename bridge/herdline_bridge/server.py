@@ -2,18 +2,22 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlsplit
 
-from .api import Api
+from .api import Api, Binary
 from .herdr import HerdrError
 
-MAX_BODY = 64 * 1024
+# Room for a few phone photos sent as base64.
+MAX_BODY = 40 * 1024 * 1024
 
 
 def make_handler(api: Api):
     class Handler(BaseHTTPRequestHandler):
-        def _reply(self, status: int, payload: dict) -> None:
-            data = json.dumps(payload, ensure_ascii=False).encode()
+        def _reply(self, status: int, payload) -> None:
+            if isinstance(payload, Binary):
+                data, content_type = payload.data, payload.content_type
+            else:
+                data, content_type = json.dumps(payload, ensure_ascii=False).encode(), 'application/json; charset=utf-8'
             self.send_response(status)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
             self.wfile.write(data)

@@ -7,6 +7,8 @@ from pathlib import Path
 CHUNK = 256 * 1024
 MAX_BYTES = 4 * 1024 * 1024
 _REMINDER = re.compile(r'<system-reminder>.*?</system-reminder>', re.S)
+IMAGE_MARK = re.compile(r'\[image: (\S+)\]')
+IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
 
 _paths: dict[str, Path] = {}
 _cache: dict[Path, tuple[int, float, int, list[dict]]] = {}
@@ -33,6 +35,22 @@ def _text_of(content) -> str:
     return '\n'.join(parts)
 
 
+def _images_of(content) -> list[dict]:
+    """Images in a message: pasted ones (base64) and files sent with the SendUserFile tool."""
+    images = []
+    for part in content if isinstance(content, list) else []:
+        if not isinstance(part, dict):
+            continue
+        source = part.get('source') or {}
+        if part.get('type') == 'image' and source.get('type') == 'base64':
+            images.append({'kind': 'base64', 'media_type': source.get('media_type'), 'data': source.get('data')})
+        elif part.get('type') == 'tool_use' and part.get('name') == 'SendUserFile':
+            for path in (part.get('input') or {}).get('files') or []:
+                if Path(path).suffix.lower() in IMAGE_TYPES:
+                    images.append({'kind': 'file', 'path': path})
+    return images
+
+
 def to_message(entry: dict) -> dict | None:
     kind = entry.get('type')
     # isCompactSummary: the summary Claude Code injects after compacting, not something the user said.
@@ -44,9 +62,18 @@ def to_message(entry: dict) -> dict | None:
         return None
     text = _REMINDER.sub('', _text_of(content)).strip()
     # Slash-command echoes and harness notices are not part of the conversation.
-    if not text or text.startswith('<'):
+    if text.startswith('<'):
         return None
-    return {'id': entry.get('uuid'), 'role': kind, 'text': text, 'ts': entry.get('timestamp')}
+    images = _images_of(content)
+    # Images the phone attached are sent as "[image: /path]" lines.
+    images += [{'kind': 'file', 'path': p} for p in IMAGE_MARK.findall(text)]
+    text = IMAGE_MARK.sub('', text).strip()
+    if kind == 'assistant' and not text:
+        text = next((p.get('input', {}).get('caption', '') for p in content or []
+                     if isinstance(p, dict) and p.get('name') == 'SendUserFile'), '')
+    if not text and not images:
+        return None
+    return {'id': entry.get('uuid'), 'role': kind, 'text': text, 'ts': entry.get('timestamp'), 'images': images}
 
 
 def _parse(lines: list[bytes]) -> list[dict]:

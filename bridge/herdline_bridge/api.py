@@ -1,4 +1,5 @@
 """Request handling, kept apart from the HTTP server so it can be tested directly."""
+import base64
 import hashlib
 import hmac
 import json
@@ -14,10 +15,20 @@ from . import transcripts
 from .config import Config
 from .herdr import Herdr, HerdrError
 
-# Keys the phone may press in a pane: enough to answer a confirmation dialog.
 USAGE_TTL = 60
+MAX_IMAGES = 6
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+# Images the phone may fetch: only those the bridge itself listed, newest kept.
+IMAGE_REGISTRY_SIZE = 500
 
+# Keys the phone may press in a pane: enough to answer a confirmation dialog.
 ALLOWED_KEYS = {'enter', 'esc', 'up', 'down', 'tab', 'y', 'n', *map(str, range(1, 10))}
+
+
+class Binary:
+    def __init__(self, data: bytes, content_type: str):
+        self.data = data
+        self.content_type = content_type
 
 
 class Api:
@@ -25,6 +36,7 @@ class Api:
         self.config = config
         self.herdr = herdr or Herdr()
         self._usage: tuple[float, str | None] | None = None
+        self._images: dict[str, dict] = {}
 
     def authorized(self, header: str | None) -> bool:
         try:
@@ -40,6 +52,8 @@ class Api:
         parts = [unquote(p) for p in path.strip('/').split('/')]
         if parts == ['api', 'spaces'] and method == 'POST':
             return self.create_space()
+        if len(parts) == 3 and parts[:2] == ['api', 'images'] and method == 'GET':
+            return self.image(parts[2])
         if parts[:2] != ['api', 'contacts']:
             return 404, {'error': 'not_found'}
         if len(parts) == 2 and method == 'GET':
@@ -53,7 +67,7 @@ class Api:
         if route == ('GET', 'messages'):
             return 200, self.messages(contact, int(query.get('limit', 50)))
         if route == ('POST', 'messages'):
-            return self.send(contact, (body or {}).get('text', ''))
+            return self.send(contact, (body or {}).get('text', ''), (body or {}).get('images') or [])
         if route == ('GET', 'screen'):
             return 200, {'text': self.herdr.screen(contact.pane)}
         if route == ('POST', 'keys'):
@@ -92,7 +106,7 @@ class Api:
                 'status': contact.status,
                 'title': contact.title,
                 'context_used': contacts_mod.context_used(self.config, contact.session_id),
-                'preview': last[-1] if last else None,
+                'preview': self._public(last[-1], with_images=False) if last else None,
             })
         return rows
 
@@ -101,13 +115,68 @@ class Api:
         return {
             'status': contact.status,
             'session_id': contact.session_id,
-            'messages': transcripts.tail(path, min(limit, 200)) if path else [],
+            'messages': [self._public(m) for m in transcripts.tail(path, min(limit, 200))] if path else [],
         }
 
-    def send(self, contact, text: str) -> tuple[int, dict]:
+    def _public(self, message: dict, with_images: bool = True) -> dict:
+        """A message as the phone sees it: images become URLs it may fetch."""
+        out = {k: v for k, v in message.items() if k != 'images'}
+        images = message.get('images') or []
+        if with_images:
+            out['images'] = [self._register(image) for image in images]
+        elif images and not out['text']:
+            out['text'] = '[圖片]'
+        return out
+
+    def _register(self, image: dict) -> str:
+        key = image.get('path') or image.get('data', '')
+        image_id = hashlib.sha256(key.encode()).hexdigest()[:24]
+        self._images.pop(image_id, None)
+        self._images[image_id] = image
+        while len(self._images) > IMAGE_REGISTRY_SIZE:
+            self._images.pop(next(iter(self._images)))
+        return f'/api/images/{image_id}'
+
+    def image(self, image_id: str) -> tuple[int, object]:
+        image = self._images.get(image_id)
+        if image is None:
+            return 404, {'error': 'not_found'}
+        if image['kind'] == 'base64':
+            try:
+                return 200, Binary(base64.b64decode(image['data']), image.get('media_type') or 'image/png')
+            except (ValueError, TypeError):
+                return 404, {'error': 'not_found'}
+        path = Path(image['path'])
+        content_type = transcripts.IMAGE_TYPES.get(path.suffix.lower())
+        if content_type is None or not path.is_file():
+            return 404, {'error': 'not_found'}
+        return 200, Binary(path.read_bytes(), content_type)
+
+    def _save_upload(self, image: dict) -> Path | None:
+        ext = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/webp': '.webp'}.get(image.get('type'))
+        try:
+            data = base64.b64decode(image.get('data') or '', validate=True)
+        except (ValueError, TypeError):
+            return None
+        if ext is None or not data or len(data) > MAX_IMAGE_BYTES:
+            return None
+        uploads = self.config.state_dir / 'uploads'
+        uploads.mkdir(parents=True, exist_ok=True)
+        path = uploads / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(4)}{ext}'
+        path.write_bytes(data)
+        return path
+
+    def send(self, contact, text: str, images: list[dict]) -> tuple[int, dict]:
         text = text.strip()
-        if not text:
+        if not text and not images:
             return 400, {'error': 'empty_text'}
+        if len(images) > MAX_IMAGES:
+            return 400, {'error': 'too_many_images'}
+        paths = [self._save_upload(image) for image in images]
+        if None in paths:
+            return 400, {'error': 'bad_image'}
+        # The session reads attached images from these paths.
+        text = '\n'.join([text, *(f'[image: {p}]' for p in paths)]).strip()
         try:
             self.herdr.prompt(contact.pane, text)
         except HerdrError as e:

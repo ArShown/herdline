@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -7,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from herdline_bridge import transcripts
-from herdline_bridge.api import Api
+from herdline_bridge.api import Api, Binary
 from herdline_bridge.config import Config
 from herdline_bridge.contacts import record_handoff
 from herdline_bridge.herdr import Herdr, HerdrError
@@ -222,6 +223,52 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.api.handle('GET', '/api/contacts', {}, None)[1]['usage'], 'A 6% │ B 11%')
         self.api.handle('GET', '/api/contacts', {}, None)
         self.assertEqual(counter.read_text().count('x'), 1)
+
+
+    def test_images_in_messages_can_be_fetched(self):
+        shot = Path(self.tmp.name) / 'shot.png'
+        shot.write_bytes(b'png-bytes')
+        secret = Path(self.tmp.name) / 'notes.txt'
+        secret.write_text('private')
+        pasted = base64.b64encode(b'jpeg-bytes').decode()
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [
+            entry('user', [{'type': 'text', 'text': 'look'},
+                           {'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': pasted}}], 'u-01'),
+            entry('assistant', [{'type': 'tool_use', 'name': 'SendUserFile',
+                                 'input': {'files': [str(shot), str(secret)], 'caption': 'here'}}], 'a-02'),
+            entry('user', f'from phone\n[image: {shot}]', 'u-03'),
+        ])
+        _, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
+        got = [(m['role'], m['text'], len(m['images'])) for m in body['messages']]
+        self.assertEqual(got, [('user', 'look', 1), ('assistant', 'here', 1), ('user', 'from phone', 1)])
+        first = self.api.handle('GET', body['messages'][0]['images'][0], {}, None)[1]
+        self.assertEqual((first.data, first.content_type), (b'jpeg-bytes', 'image/jpeg'))
+        second = self.api.handle('GET', body['messages'][1]['images'][0], {}, None)[1]
+        self.assertEqual((second.data, second.content_type), (b'png-bytes', 'image/png'))
+        self.assertEqual(self.api.handle('GET', '/api/images/unknown', {}, None)[0], 404)
+
+    def test_preview_of_image_only_message(self):
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [entry('user', '[image: /tmp/x.png]', 'u-01')])
+        preview = next(c for c in self.api.list_contacts() if c['id'] == 'w1')['preview']
+        self.assertEqual(preview['text'], '[圖片]')
+        self.assertNotIn('images', preview)
+
+    def test_send_with_images_saves_and_references_them(self):
+        photo = {'type': 'image/jpeg', 'data': base64.b64encode(b'photo').decode()}
+        status, _ = self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': 'see', 'images': [photo]})
+        self.assertEqual(status, 202)
+        pane, text = self.herdr.prompts[0]
+        saved = Path(text.split('[image: ')[1].rstrip(']'))
+        self.assertEqual((pane, text.splitlines()[0], saved.read_bytes()), ('w2:p1', 'see', b'photo'))
+        self.assertEqual(saved.parent, self.config.state_dir / 'uploads')
+        bad = {'type': 'image/jpeg', 'data': 'not base64!'}
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'images': [bad]})[0], 400)
+        exe = {'type': 'application/x-sh', 'data': base64.b64encode(b'x').decode()}
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'images': [exe]})[0], 400)
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'images': [photo] * 7})[0], 400)
+        self.assertEqual(len(self.herdr.prompts), 1)
 
 
 if __name__ == '__main__':
