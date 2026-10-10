@@ -26,6 +26,7 @@ class FakeHerdr(Herdr):
         self.keys = []
         self.blocked = set()
         self.created = []
+        self.renamed = []
         self.started = []
 
     def agents(self):
@@ -44,6 +45,12 @@ class FakeHerdr(Herdr):
 
     def send_keys(self, pane, keys):
         self.keys.append((pane, keys))
+
+    def rename_workspace(self, workspace_id, label):
+        self.renamed.append((workspace_id, label))
+        for w in self._workspaces:
+            if w['workspace_id'] == workspace_id:
+                w['label'] = label
 
     def create_workspace(self, cwd, label, env):
         self.created.append((cwd, label, env))
@@ -102,14 +109,14 @@ class ApiTest(unittest.TestCase):
     def test_most_recent_session_is_on_duty(self):
         self.write_transcript('s-old', [entry('user', 'hi', 'u-01')], age=0)
         self.write_transcript('s-new', [entry('user', 'hi', 'u-02')], age=60)
-        self.api.handle('POST', '/api/contacts/proj_api/messages', {}, {'text': 'hello'})
+        self.api.handle('POST', '/api/contacts/w1/messages', {}, {'text': 'hello'})
         self.assertEqual(self.herdr.prompts, [('w1:p1', 'hello')])
 
     def test_handoff_record_overrides_recency(self):
         self.write_transcript('s-old', [entry('user', 'hi', 'u-01')], age=0)
         self.write_transcript('s-new', [entry('user', 'hi', 'u-02')], age=60)
         record_handoff(self.config, 's-old', 's-new')
-        self.api.handle('POST', '/api/contacts/proj_api/messages', {}, {'text': 'hello'})
+        self.api.handle('POST', '/api/contacts/w1/messages', {}, {'text': 'hello'})
         self.assertEqual(self.herdr.prompts, [('w1:p2', 'hello')])
 
     def test_messages_keep_chat_only(self):
@@ -125,7 +132,7 @@ class ApiTest(unittest.TestCase):
             'not json',
             entry('assistant', [{'type': 'text', 'text': 'answer'}], 'a-06'),
         ])
-        status, body = self.api.handle('GET', '/api/contacts/proj_api/messages', {}, None)
+        status, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
         self.assertEqual(status, 200)
         self.assertEqual([(m['role'], m['text']) for m in body['messages']],
                          [('user', 'question'), ('assistant', 'checking'), ('assistant', 'answer')])
@@ -141,25 +148,25 @@ class ApiTest(unittest.TestCase):
     def test_preview_and_context(self):
         self.write_transcript('s-web', [entry('assistant', [{'type': 'text', 'text': 'done'}], 'a-01')])
         (self.config.context_dir / 's-web.json').write_text('{"used_percentage": 42}')
-        web = next(c for c in self.api.list_contacts() if c['id'] == 'proj_web')
+        web = next(c for c in self.api.list_contacts() if c['id'] == 'w2')
         self.assertEqual(web['preview']['text'], 'done')
         self.assertEqual(web['context_used'], 42)
         self.assertEqual(web['status'], 'blocked')
 
     def test_blocked_session_rejects_prompt(self):
         self.herdr.blocked.add('w2:p1')
-        status, body = self.api.handle('POST', '/api/contacts/proj_web/messages', {}, {'text': 'hi'})
+        status, body = self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': 'hi'})
         self.assertEqual((status, body['error']), (409, 'agent_blocked'))
 
     def test_keys_whitelist(self):
-        status, _ = self.api.handle('POST', '/api/contacts/proj_web/keys', {}, {'keys': ['1', 'enter']})
+        status, _ = self.api.handle('POST', '/api/contacts/w2/keys', {}, {'keys': ['1', 'enter']})
         self.assertEqual(status, 200)
-        status, _ = self.api.handle('POST', '/api/contacts/proj_web/keys', {}, {'keys': ['rm -rf']})
+        status, _ = self.api.handle('POST', '/api/contacts/w2/keys', {}, {'keys': ['rm -rf']})
         self.assertEqual(status, 400)
         self.assertEqual(self.herdr.keys, [('w2:p1', ['1', 'enter'])])
 
     def test_empty_text_and_unknown_contact(self):
-        self.assertEqual(self.api.handle('POST', '/api/contacts/proj_web/messages', {}, {'text': ' '})[0], 400)
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': ' '})[0], 400)
         self.assertEqual(self.api.handle('GET', '/api/contacts/nope/messages', {}, None)[0], 404)
 
 
@@ -167,7 +174,7 @@ class ApiTest(unittest.TestCase):
         self.config.space_cwd = Path(self.tmp.name)
         self.herdr._workspaces.append({'workspace_id': 'w3', 'label': 'Space 1'})
         status, body = self.api.handle('POST', '/api/spaces', {}, None)
-        self.assertEqual((status, body['id']), (201, 'Space 2'))
+        self.assertEqual((status, body['id'], body['name']), (201, 'w9', 'Space 2'))
         self.assertEqual(self.herdr.created[0][:2], (self.tmp.name, 'Space 2'))
         name, pane, args = self.herdr.started[0]
         self.assertTrue(name.startswith('space-2-'))
@@ -191,6 +198,21 @@ class ApiTest(unittest.TestCase):
         self.config.space_cwd = Path(self.tmp.name)
         status, body = self.api.handle('POST', '/api/spaces', {}, None)
         self.assertEqual((status, body['account']), (201, 'claude'))
+
+    def test_auto_named_space_takes_its_task_title(self):
+        self.herdr._workspaces.append({'workspace_id': 'w3', 'label': 'Space 1'})
+        self.herdr._agents.append(agent('s-3', 'w3', 'w3:p1'))
+        self.herdr._agents[-1]['terminal_title_stripped'] = 'Claude Code'
+        self.api.list_contacts()
+        self.assertEqual(self.herdr.renamed, [])
+        self.herdr._agents[-1]['terminal_title_stripped'] = '修登入頁'
+        names = {c['id']: c['name'] for c in self.api.list_contacts()}
+        self.assertEqual((names['w3'], self.herdr.renamed), ('修登入頁', [('w3', '修登入頁')]))
+        # Named spaces keep their name even when the title changes.
+        self.herdr._agents[-1]['terminal_title_stripped'] = '別的事'
+        self.assertEqual({c['id']: c['name'] for c in self.api.list_contacts()}['w3'], '修登入頁')
+        self.assertEqual(len(self.herdr.renamed), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

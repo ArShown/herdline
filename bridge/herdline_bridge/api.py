@@ -127,6 +127,6 @@ class Api:
         config_dir = self.config.accounts.get(account) if account else None
         if config_dir and config_dir != Path.home() / '.claude':
             env['CLAUDE_CONFIG_DIR'] = str(config_dir)
-        _, pane = self.herdr.create_workspace(str(self.config.space_cwd), name, env)
+        workspace_id, pane = self.herdr.create_workspace(str(self.config.space_cwd), name, env)
         status = self.herdr.start_claude(f'space-{number}-{secrets.token_hex(2)}', pane, self.config.claude_args)
-        return 201, {'id': name, 'status': status, 'account': account}
+        return 201, {'id': workspace_id, 'name': name, 'status': status, 'account': account}

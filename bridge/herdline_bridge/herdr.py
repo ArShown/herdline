@@ -43,6 +43,9 @@ class Herdr:
     def send_keys(self, pane: str, keys: list[str]) -> None:
         self._run(['agent', 'send-keys', pane, *keys])
 
+    def rename_workspace(self, workspace_id: str, label: str) -> None:
+        self._run(['workspace', 'rename', workspace_id, label])
+
     def create_workspace(self, cwd: str, label: str, env: dict[str, str]) -> tuple[str, str]:
         args = ['workspace', 'create', '--cwd', cwd, '--label', label, '--no-focus']
         for key, value in env.items():

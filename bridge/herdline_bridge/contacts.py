@@ -1,5 +1,6 @@
 """A contact is a herdr workspace; its on-duty session is the main Claude pane there."""
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,9 +9,14 @@ from .config import Config
 from .herdr import Herdr
 
 
+# A space opened from the phone is called "Space N" until its session gets a task title.
+AUTO_NAME = re.compile(r'Space \d+')
+UNSET_TITLES = {'', 'claude code'}
+
+
 @dataclass
 class Contact:
-    id: str  # workspace label, stable across herdr restarts
+    id: str  # herdr workspace id; stays the same when the space is renamed
     name: str
     workspace_id: str
     session_id: str
@@ -55,8 +61,13 @@ def resolve_all(herdr: Herdr, config: Config) -> list[Contact]:
     for workspace_id, agents in by_workspace.items():
         agent = _on_duty(agents, successors, config)
         label = labels.get(workspace_id, workspace_id)
+        title = (agent.get('terminal_title_stripped') or '').strip()
+        if AUTO_NAME.fullmatch(label) and title.lower() not in UNSET_TITLES:
+            # Like the Claude app: once the session knows its task, the space takes that name.
+            herdr.rename_workspace(workspace_id, title)
+            label = title
         contacts.append(Contact(
-            id=label,
+            id=workspace_id,
             name=config.aliases.get(label, label),
             workspace_id=workspace_id,
             session_id=agent['agent_session']['value'],

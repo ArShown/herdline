@@ -35,8 +35,8 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
   const createSpace = async () => {
     setCreating(true);
     try {
-      const { id, status } = await api.createSpace(server);
-      onOpen({ id, name: id, status, title: null, context_used: null, preview: null });
+      const { id, name, status } = await api.createSpace(server);
+      onOpen({ id, name, status, title: null, context_used: null, preview: null });
     } catch {
       setError('開不起新的 space');
     } finally {
@@ -96,7 +96,7 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
                 <Text style={{ color: statusColor[item.status], fontSize: 12 }}>{statusLabel[item.status]}</Text>
                 {item.context_used != null && (
                   <Text style={{ fontSize: 12, color: item.context_used >= CONTEXT_WARN ? theme.danger : theme.muted }}>
-                    已用 {item.context_used}%
+                    ctx {item.context_used}%
                   </Text>
                 )}
               </View>
