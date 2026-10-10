@@ -1,10 +1,10 @@
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useState } from 'react';
 import {
   FlatList,
   Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,17 +13,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { api, ApiError, type Contact, type Message, type OutgoingImage, type Server, type Status } from '../api';
+import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
+import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
 import { Markdown } from '../Markdown';
+import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
 import { statusColor, statusLabel, useTheme } from '../theme';
 import { usePolling } from '../usePolling';
 
 // Keys the bridge accepts; enough to answer a confirmation dialog.
 const DIALOG_KEYS = ['1', '2', '3', 'enter', 'esc'];
-const MAX_IMAGES = 6;
+const MAX_ATTACHMENTS = 6;
 
-type Picked = OutgoingImage & { uri: string };
 type Props = { server: Server; contact: Contact; onBack: () => void };
 
 export function ChatScreen({ server, contact, onBack }: Props) {
@@ -31,11 +32,14 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>(contact.status);
   const [draft, setDraft] = useState('');
-  const [picked, setPicked] = useState<Picked[]>([]);
+  const [picked, setPicked] = useState<Marked[]>([]);
+  const [files, setFiles] = useState<OutgoingFile[]>([]);
+  const [sheet, setSheet] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [screen, setScreen] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<ImageSource | null>(null);
+  const room = MAX_ATTACHMENTS - picked.length - files.length;
 
   const load = useCallback(async () => {
     try {
@@ -55,7 +59,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      selectionLimit: MAX_IMAGES - picked.length,
+      selectionLimit: Math.max(room, 1),
       quality: 0.7,
       base64: true,
     });
@@ -63,18 +67,26 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     const added = result.assets
       .filter((a) => a.base64)
       .map((a) => ({ uri: a.uri, data: a.base64!, type: a.mimeType ?? 'image/jpeg' }));
-    setPicked((current) => [...current, ...added].slice(0, MAX_IMAGES));
+    setPicked((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS - files.length));
   };
 
-  const canSend = (draft.trim() || picked.length > 0) && !sending;
+  const pickFiles = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ multiple: true, base64: true, copyToCacheDirectory: true });
+    if (result.canceled) return;
+    const added = result.assets.filter((a) => a.base64).map((a) => ({ name: a.name, data: a.base64! }));
+    setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS - picked.length));
+  };
+
+  const canSend = (draft.trim() || picked.length > 0 || files.length > 0) && !sending;
 
   const send = async () => {
     if (!canSend) return;
     setSending(true);
     try {
-      await api.send(server, contact.id, draft.trim(), picked.map(({ type, data }) => ({ type, data })));
+      await api.send(server, contact.id, draft.trim(), picked.map(({ type, data }) => ({ type, data })), files);
       setDraft('');
       setPicked([]);
+      setFiles([]);
       setStatus('working');
       await load();
     } catch (e) {
@@ -98,9 +110,22 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     images?.length ? (
       <View style={[styles.images, mine && styles.imagesMine]}>
         {images.map((path) => (
-          <Pressable key={path} onPress={() => setViewing(path)}>
+          <Pressable key={path} onPress={() => setViewing({ kind: 'remote', path })}>
             <AuthImage server={server} path={path} style={[styles.thumb, { backgroundColor: theme.surface }]} />
           </Pressable>
+        ))}
+      </View>
+    ) : null;
+
+  const renderFiles = (names: string[] | undefined, mine: boolean) =>
+    names?.length ? (
+      <View style={[styles.images, mine && styles.imagesMine]}>
+        {names.map((name) => (
+          <View key={name} style={[styles.fileChip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={{ color: theme.text }} numberOfLines={1}>
+              📎 {name}
+            </Text>
+          </View>
         ))}
       </View>
     ) : null;
@@ -159,6 +184,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           item.role === 'user' ? (
             <View style={styles.userRow}>
               {renderImages(item.images, true)}
+              {renderFiles(item.files, true)}
               {!!item.text && (
                 <View style={[styles.userBubble, { backgroundColor: theme.bubble }]}>
                   <Text selectable style={[styles.userText, { color: theme.text }]}>
@@ -171,6 +197,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             <View style={styles.assistantRow}>
               {!!item.text && <Markdown text={item.text} theme={theme} />}
               {renderImages(item.images, false)}
+              {renderFiles(item.files, false)}
             </View>
           )
         }
@@ -179,11 +206,27 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
 
       <View style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {picked.length > 0 && (
+        {(picked.length > 0 || files.length > 0) && (
           <ScrollView horizontal contentContainerStyle={styles.picked}>
+            {files.map((file, i) => (
+              <View key={`${file.name}-${i}`} style={[styles.pickedFile, { backgroundColor: theme.bg }]}>
+                <Text style={{ color: theme.text, fontSize: 12 }} numberOfLines={2}>
+                  📎 {file.name}
+                </Text>
+                <Pressable
+                  style={styles.remove}
+                  hitSlop={8}
+                  onPress={() => setFiles((current) => current.filter((_, j) => j !== i))}
+                >
+                  <Text style={styles.removeText}>×</Text>
+                </Pressable>
+              </View>
+            ))}
             {picked.map((image, i) => (
-              <View key={image.uri}>
-                <Image source={{ uri: image.uri }} style={styles.pickedThumb} />
+              <View key={`${i}-${image.uri.slice(-24)}`}>
+                <Pressable onPress={() => setViewing({ kind: 'local', uri: image.uri })}>
+                  <Image source={{ uri: image.uri }} style={styles.pickedThumb} />
+                </Pressable>
                 <Pressable
                   style={styles.remove}
                   hitSlop={8}
@@ -206,8 +249,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         <View style={styles.composerBar}>
           <Pressable
             style={[styles.round, { borderColor: theme.border }]}
-            disabled={picked.length >= MAX_IMAGES}
-            onPress={pickImages}
+            onPress={() => setSheet(true)}
             hitSlop={6}
           >
             <Text style={{ color: theme.text, fontSize: 20, lineHeight: 22 }}>＋</Text>
@@ -222,11 +264,20 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         </View>
       </View>
 
-      <Modal visible={viewing != null} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
-        <Pressable style={styles.viewer} onPress={() => setViewing(null)}>
-          {viewing && <AuthImage server={server} path={viewing} style={styles.viewerImage} />}
-        </Pressable>
-      </Modal>
+      <AttachSheet
+        visible={sheet}
+        theme={theme}
+        onClose={() => setSheet(false)}
+        onPhotos={() => room > 0 && pickImages()}
+        onFiles={() => room > 0 && pickFiles()}
+        onShortcut={(word) => setDraft((d) => (d.trim() ? `${d.trim()} ${word}` : word))}
+      />
+      <MarkupViewer
+        server={server}
+        source={viewing}
+        onClose={() => setViewing(null)}
+        onAttach={(image) => setPicked((current) => [...current, image].slice(0, MAX_ATTACHMENTS - files.length))}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -296,6 +347,6 @@ const styles = StyleSheet.create({
   },
   send: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sendText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  viewer: { flex: 1, backgroundColor: '#000e', alignItems: 'center', justifyContent: 'center' },
-  viewerImage: { width: '100%', height: '80%', resizeMode: 'contain' },
+  fileChip: { maxWidth: '85%', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
+  pickedFile: { width: 120, height: 64, borderRadius: 10, padding: 8, justifyContent: 'center' },
 });

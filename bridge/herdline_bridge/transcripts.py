@@ -8,6 +8,10 @@ CHUNK = 256 * 1024
 MAX_BYTES = 4 * 1024 * 1024
 _REMINDER = re.compile(r'<system-reminder>.*?</system-reminder>', re.S)
 IMAGE_MARK = re.compile(r'\[image: (\S+)\]')
+FILE_MARK = re.compile(r'\[file: (\S+)\]')
+# Uploaded files are saved as "<time>-<random>-<original name>".
+UPLOAD_PREFIX_FORMAT = '{}-{}-'
+_UPLOAD_PREFIX = re.compile(r'^\d{8}-\d{6}-[0-9a-f]{8}-')
 IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
 
 _paths: dict[str, Path] = {}
@@ -67,13 +71,15 @@ def to_message(entry: dict) -> dict | None:
     images = _images_of(content)
     # Images the phone attached are sent as "[image: /path]" lines.
     images += [{'kind': 'file', 'path': p} for p in IMAGE_MARK.findall(text)]
-    text = IMAGE_MARK.sub('', text).strip()
+    files = [_UPLOAD_PREFIX.sub('', Path(p).name) for p in FILE_MARK.findall(text)]
+    text = FILE_MARK.sub('', IMAGE_MARK.sub('', text)).strip()
     if kind == 'assistant' and not text:
         text = next((p.get('input', {}).get('caption', '') for p in content or []
                      if isinstance(p, dict) and p.get('name') == 'SendUserFile'), '')
-    if not text and not images:
+    if not text and not images and not files:
         return None
-    return {'id': entry.get('uuid'), 'role': kind, 'text': text, 'ts': entry.get('timestamp'), 'images': images}
+    return {'id': entry.get('uuid'), 'role': kind, 'text': text, 'ts': entry.get('timestamp'),
+            'images': images, 'files': files}
 
 
 def _parse(lines: list[bytes]) -> list[dict]:

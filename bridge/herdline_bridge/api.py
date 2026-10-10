@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import shlex
 import subprocess
@@ -16,8 +17,9 @@ from .config import Config
 from .herdr import Herdr, HerdrError
 
 USAGE_TTL = 60
-MAX_IMAGES = 6
+MAX_ATTACHMENTS = 6
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_FILE_BYTES = 20 * 1024 * 1024
 # Images the phone may fetch: only those the bridge itself listed, newest kept.
 IMAGE_REGISTRY_SIZE = 500
 
@@ -67,7 +69,8 @@ class Api:
         if route == ('GET', 'messages'):
             return 200, self.messages(contact, int(query.get('limit', 50)))
         if route == ('POST', 'messages'):
-            return self.send(contact, (body or {}).get('text', ''), (body or {}).get('images') or [])
+            body = body or {}
+            return self.send(contact, body.get('text', ''), body.get('images') or [], body.get('files') or [])
         if route == ('GET', 'screen'):
             return 200, {'text': self.herdr.screen(contact.pane)}
         if route == ('POST', 'keys'):
@@ -124,8 +127,8 @@ class Api:
         images = message.get('images') or []
         if with_images:
             out['images'] = [self._register(image) for image in images]
-        elif images and not out['text']:
-            out['text'] = '[圖片]'
+        elif not out['text']:
+            out['text'] = '[圖片]' if images else '[檔案] ' + ', '.join(message.get('files') or [])
         return out
 
     def _register(self, image: dict) -> str:
@@ -152,31 +155,37 @@ class Api:
             return 404, {'error': 'not_found'}
         return 200, Binary(path.read_bytes(), content_type)
 
-    def _save_upload(self, image: dict) -> Path | None:
-        ext = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/webp': '.webp'}.get(image.get('type'))
+    def _save_upload(self, encoded: str, name: str, limit: int) -> Path | None:
         try:
-            data = base64.b64decode(image.get('data') or '', validate=True)
+            data = base64.b64decode(encoded or '', validate=True)
         except (ValueError, TypeError):
             return None
-        if ext is None or not data or len(data) > MAX_IMAGE_BYTES:
+        if not data or len(data) > limit:
             return None
         uploads = self.config.state_dir / 'uploads'
         uploads.mkdir(parents=True, exist_ok=True)
-        path = uploads / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(4)}{ext}'
+        # Keep the original name readable but safe: no folders, no spaces.
+        safe = re.sub(r'[^\w.\-]+', '_', Path(name).name).strip('._') or 'file'
+        path = uploads / f'{transcripts.UPLOAD_PREFIX_FORMAT.format(time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(4))}{safe}'
         path.write_bytes(data)
         return path
 
-    def send(self, contact, text: str, images: list[dict]) -> tuple[int, dict]:
+    def _save_image(self, image: dict) -> Path | None:
+        ext = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/webp': '.webp'}.get(image.get('type'))
+        return self._save_upload(image.get('data'), f'image{ext}', MAX_IMAGE_BYTES) if ext else None
+
+    def send(self, contact, text: str, images: list[dict], files: list[dict]) -> tuple[int, dict]:
         text = text.strip()
-        if not text and not images:
+        if not text and not images and not files:
             return 400, {'error': 'empty_text'}
-        if len(images) > MAX_IMAGES:
-            return 400, {'error': 'too_many_images'}
-        paths = [self._save_upload(image) for image in images]
-        if None in paths:
-            return 400, {'error': 'bad_image'}
-        # The session reads attached images from these paths.
-        text = '\n'.join([text, *(f'[image: {p}]' for p in paths)]).strip()
+        if len(images) + len(files) > MAX_ATTACHMENTS:
+            return 400, {'error': 'too_many_attachments'}
+        image_paths = [self._save_image(image) for image in images]
+        file_paths = [self._save_upload(f.get('data'), f.get('name') or 'file', MAX_FILE_BYTES) for f in files]
+        if None in image_paths or None in file_paths:
+            return 400, {'error': 'bad_attachment'}
+        # The session reads attachments from these paths.
+        text = '\n'.join([text, *(f'[image: {p}]' for p in image_paths), *(f'[file: {p}]' for p in file_paths)]).strip()
         try:
             self.herdr.prompt(contact.pane, text)
         except HerdrError as e:

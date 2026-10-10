@@ -271,5 +271,21 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(len(self.herdr.prompts), 1)
 
 
+    def test_send_files_keeps_name_and_shows_it(self):
+        doc = {'name': '../報價 v2.pdf', 'data': base64.b64encode(b'%PDF').decode()}
+        status, _ = self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': 'read this', 'files': [doc]})
+        self.assertEqual(status, 202)
+        text = self.herdr.prompts[0][1]
+        saved = Path(text.split('[file: ')[1].rstrip(']'))
+        self.assertEqual((saved.parent, saved.read_bytes()), (self.config.state_dir / 'uploads', b'%PDF'))
+        self.assertTrue(saved.name.endswith('-報價_v2.pdf'))
+        self.write_transcript('s-web', [entry('user', text, 'u-01')])
+        _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
+        self.assertEqual((body['messages'][0]['text'], body['messages'][0]['files']), ('read this', ['報價_v2.pdf']))
+        self.write_transcript('s-web', [entry('user', f'[file: {saved}]', 'u-02')])
+        preview = next(c for c in self.api.list_contacts() if c['id'] == 'w2')['preview']
+        self.assertEqual(preview['text'], '[檔案] 報價_v2.pdf')
+
+
 if __name__ == '__main__':
     unittest.main()
