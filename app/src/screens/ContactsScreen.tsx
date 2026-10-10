@@ -34,7 +34,7 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
   return (
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { borderColor: theme.border }]}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>專案</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
         <Pressable onPress={onLogout} hitSlop={12}>
           <Text style={{ color: theme.accent }}>設定</Text>
         </Pressable>
