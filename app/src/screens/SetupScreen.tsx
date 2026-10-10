@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, ApiError, type Server } from '../api';
@@ -32,7 +33,13 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
   const input = [styles.input, { backgroundColor: theme.surface, color: theme.text }];
   return (
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
-      <Text style={[styles.title, { color: theme.text }]}>連線設定</Text>
+      <View style={styles.brand}>
+        <View style={[styles.logo, { backgroundColor: theme.accent }]}>
+          <Ionicons name="chatbubbles" size={30} color="#fff" />
+        </View>
+        <Text style={[styles.title, { color: theme.text }]}>herdline</Text>
+        <Text style={{ color: theme.muted }}>輸入電腦端產生的金鑰</Text>
+      </View>
       {!FIXED_URL && (
         <TextInput
           style={input}
@@ -69,7 +76,9 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, padding: 24, gap: 12, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 8 },
+  brand: { alignItems: 'center', gap: 8, marginBottom: 20 },
+  logo: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  title: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
   input: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
   button: { borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },

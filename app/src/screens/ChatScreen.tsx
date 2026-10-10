@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useState } from 'react';
@@ -18,6 +19,7 @@ import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
 import { Markdown } from '../Markdown';
 import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
+import { ThinkingDots } from '../ThinkingDots';
 import { statusColor, statusLabel, useTheme } from '../theme';
 import { usePolling } from '../usePolling';
 
@@ -125,7 +127,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         {names.map((name) => (
           <View key={name} style={[styles.fileChip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={{ color: theme.text }} numberOfLines={1}>
-              📎 {name}
+              <Ionicons name="document-outline" size={14} color={theme.muted} /> {name}
             </Text>
           </View>
         ))}
@@ -139,7 +141,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     >
       <View style={[styles.header, { borderColor: theme.border }]}>
         <Pressable onPress={onBack} hitSlop={12}>
-          <Text style={{ color: theme.text, fontSize: 26, lineHeight: 28 }}>‹</Text>
+          <Ionicons name="chevron-back" size={26} color={theme.text} />
         </Pressable>
         <View style={styles.headerCenter}>
           <View style={styles.titleRow}>
@@ -153,7 +155,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           <Text style={{ color: statusColor[status], fontSize: 12 }}>{statusLabel[status]}</Text>
         </View>
         <Pressable onPress={showScreen} hitSlop={12}>
-          <Text style={{ color: theme.muted }}>畫面</Text>
+          <Ionicons name="desktop-outline" size={20} color={theme.muted} />
         </Pressable>
       </View>
 
@@ -186,6 +188,9 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         contentContainerStyle={styles.listContent}
         data={[...messages].reverse()}
         inverted
+        ListHeaderComponent={
+          status === 'working' || sending ? <ThinkingDots color={theme.muted} label={sending ? '傳送中' : '思考中'} /> : null
+        }
         keyExtractor={(m, i) => m.id ?? String(i)}
         renderItem={({ item }) =>
           item.role === 'user' ? (
@@ -218,7 +223,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             {files.map((file, i) => (
               <View key={`${file.name}-${i}`} style={[styles.pickedFile, { backgroundColor: theme.bg }]}>
                 <Text style={{ color: theme.text, fontSize: 12 }} numberOfLines={2}>
-                  📎 {file.name}
+                  <Ionicons name="document-outline" size={12} color={theme.muted} /> {file.name}
                 </Text>
                 <Pressable
                   style={styles.remove}
@@ -259,14 +264,14 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             onPress={() => setSheet(true)}
             hitSlop={6}
           >
-            <Text style={{ color: theme.text, fontSize: 20, lineHeight: 22 }}>＋</Text>
+            <Ionicons name="add" size={22} color={theme.text} />
           </Pressable>
           <Pressable
             style={[styles.send, { backgroundColor: canSend ? theme.accent : theme.border }]}
             disabled={!canSend}
             onPress={send}
           >
-            <Text style={styles.sendText}>↑</Text>
+            <Ionicons name="arrow-up" size={20} color="#fff" />
           </Pressable>
         </View>
       </View>
@@ -362,7 +367,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   send: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  sendText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   fileChip: { maxWidth: '85%', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
   pickedFile: { width: 120, height: 64, borderRadius: 10, padding: 8, justifyContent: 'center' },
 });

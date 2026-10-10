@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
@@ -100,11 +101,12 @@ export function MarkupViewer({ server, source, onClose, onAttach }: Props) {
     <Modal visible={source != null} animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={styles.wrap}>
         <View style={styles.bar}>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={styles.barText}>關閉</Text>
+          <Pressable onPress={onClose} hitSlop={10} style={styles.circle}>
+            <Ionicons name="close" size={22} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => setDrawing((d) => !d)} hitSlop={10}>
-            <Text style={[styles.barText, drawing && styles.active]}>{drawing ? '標記中' : '標記'}</Text>
+          <Pressable onPress={() => setDrawing((d) => !d)} hitSlop={10} style={[styles.toggle, drawing && styles.toggleOn]}>
+            <Ionicons name={drawing ? 'brush' : 'brush-outline'} size={16} color={drawing ? '#000' : '#fff'} />
+            <Text style={[styles.barText, drawing && styles.toggleOnText]}>標記</Text>
           </Pressable>
           <Pressable onPress={attach} disabled={strokes.length === 0} hitSlop={10}>
             <Text style={[styles.barText, { opacity: strokes.length ? 1 : 0.4 }]}>加到訊息</Text>
@@ -152,10 +154,10 @@ export function MarkupViewer({ server, source, onClose, onAttach }: Props) {
               />
             ))}
             <Pressable onPress={() => setStrokes((s) => s.slice(0, -1))} hitSlop={10}>
-              <Text style={styles.barText}>復原</Text>
+              <Ionicons name="arrow-undo" size={24} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setStrokes([])} hitSlop={10}>
-              <Text style={styles.barText}>清除</Text>
+              <Ionicons name="trash-outline" size={22} color="#fff" />
             </Pressable>
           </View>
         )}
@@ -166,9 +168,12 @@ export function MarkupViewer({ server, source, onClose, onAttach }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#000' },
-  bar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 12 },
+  bar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10 },
+  circle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ffffff22', alignItems: 'center', justifyContent: 'center' },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#ffffff22' },
+  toggleOn: { backgroundColor: '#fff' },
+  toggleOnText: { color: '#000', fontWeight: '600' },
   barText: { color: '#fff', fontSize: 16 },
-  active: { color: '#f59e0b', fontWeight: '600' },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   zoom: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   contain: { resizeMode: 'contain' },

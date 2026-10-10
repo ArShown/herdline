@@ -1,11 +1,10 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { api, ApiError, type Contact, type Server } from '../api';
 import { formatTime } from '../format';
-import { statusColor, statusLabel, useTheme } from '../theme';
+import { avatarColor, meterColor, statusColor, statusLabel, useTheme } from '../theme';
 import { usePolling } from '../usePolling';
-
-const CONTEXT_WARN = 70;
 
 type Props = {
   server: Server;
@@ -13,12 +12,19 @@ type Props = {
   onLogout: () => void;
 };
 
+/** "Claude A 6%" -> ["Claude A", "6%"]; text without a trailing value stays whole. */
+function splitUsage(part: string): [string, string] {
+  const match = part.trim().match(/^(.*\S)\s+(\S+)$/);
+  return match ? [match[1], match[2]] : [part.trim(), ''];
+}
+
 export function ContactsScreen({ server, onOpen, onLogout }: Props) {
   const theme = useTheme();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [usage, setUsage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -34,7 +40,6 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
 
   usePolling(load, 10_000);
 
-  const [creating, setCreating] = useState(false);
   const createSpace = async () => {
     setCreating(true);
     try {
@@ -47,107 +52,133 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
     }
   };
 
-  return (
-    <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { borderColor: theme.border }]}>
+  const header = (
+    <View>
+      <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
         <View style={styles.actions}>
-          <Pressable onPress={onLogout} hitSlop={12}>
-            <Text style={{ color: theme.accent }}>設定</Text>
+          <Pressable onPress={onLogout} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
+            <Ionicons name="settings-outline" size={18} color={theme.text} />
           </Pressable>
-          {creating ? (
-            <ActivityIndicator />
-          ) : (
-            <Pressable onPress={createSpace} hitSlop={12}>
-              <Text style={{ color: theme.accent, fontSize: 24, lineHeight: 26 }}>＋</Text>
-            </Pressable>
-          )}
+          <Pressable onPress={createSpace} disabled={creating} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.accent }]}>
+            {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={22} color="#fff" />}
+          </Pressable>
         </View>
       </View>
       {usage && (
-        <View style={[styles.usage, { borderColor: theme.border }]}>
-          {usage.split('│').map((part) => (
-            <Text key={part} style={[styles.usageItem, { color: theme.muted, backgroundColor: theme.surface }]}>
-              {part.trim()}
-            </Text>
-          ))}
+        <View style={styles.usage}>
+          {usage.split('│').map((part) => {
+            const [label, value] = splitUsage(part);
+            return (
+              <View key={part} style={[styles.usageCard, { backgroundColor: theme.surface }]}>
+                <Text style={[styles.usageLabel, { color: theme.muted }]} numberOfLines={1}>
+                  {label}
+                </Text>
+                <Text style={[styles.usageValue, { color: meterColor(value, theme) }]}>{value}</Text>
+              </View>
+            );
+          })}
         </View>
       )}
       {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
-      <FlatList
-        data={contacts}
-        keyExtractor={(c) => c.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await load();
-              setRefreshing(false);
-            }}
-          />
-        }
-        ListEmptyComponent={<Text style={[styles.empty, { color: theme.muted }]}>沒有在跑的對話</Text>}
-        renderItem={({ item }) => (
-          <Pressable style={[styles.row, { borderColor: theme.border }]} onPress={() => onOpen(item)}>
-            <View style={[styles.avatar, { backgroundColor: theme.surface }]}>
-              <Text style={[styles.avatarText, { color: theme.text }]}>{item.name.slice(0, 1).toUpperCase()}</Text>
-              <View style={[styles.dot, { backgroundColor: statusColor[item.status], borderColor: theme.bg }]} />
+    </View>
+  );
+
+  return (
+    <FlatList
+      style={{ backgroundColor: theme.bg }}
+      contentContainerStyle={styles.content}
+      data={contacts}
+      keyExtractor={(c) => c.id}
+      ListHeaderComponent={header}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+        />
+      }
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Ionicons name="chatbubbles-outline" size={36} color={theme.muted} />
+          <Text style={{ color: theme.muted }}>沒有在跑的對話，按右上角開一個</Text>
+        </View>
+      }
+      renderItem={({ item }) => {
+        const ctx = item.context_used;
+        return (
+          <Pressable
+            style={({ pressed }) => [styles.card, { backgroundColor: pressed ? theme.surface : theme.card, borderColor: theme.border }]}
+            onPress={() => onOpen(item)}
+          >
+            <View style={[styles.avatar, { backgroundColor: avatarColor(item.name) }]}>
+              <Text style={styles.avatarText}>{item.name.slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={styles.body}>
               <View style={styles.line}>
                 <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
                   {item.name}
                 </Text>
-                <Text style={{ color: theme.muted, fontSize: 12 }}>{formatTime(item.preview?.ts)}</Text>
+                <Text style={[styles.time, { color: theme.muted }]}>{formatTime(item.preview?.ts)}</Text>
               </View>
-              <Text style={{ color: theme.muted }} numberOfLines={1}>
-                {item.status === 'blocked' ? '等你確認' : item.preview?.text ?? item.title ?? ''}
+              <Text style={[styles.preview, { color: theme.muted }]} numberOfLines={2}>
+                {item.status === 'blocked' ? '正在等你確認' : item.preview?.text ?? item.title ?? ''}
               </Text>
-              <View style={styles.line}>
-                <Text style={{ color: statusColor[item.status], fontSize: 12 }}>{statusLabel[item.status]}</Text>
-                {item.context_used != null && (
-                  <Text style={{ fontSize: 12, color: item.context_used >= CONTEXT_WARN ? theme.danger : theme.muted }}>
-                    ctx {item.context_used}%
-                  </Text>
+              <View style={styles.meta}>
+                <View style={[styles.pill, { backgroundColor: statusColor[item.status] + '22' }]}>
+                  <View style={[styles.dot, { backgroundColor: statusColor[item.status] }]} />
+                  <Text style={[styles.pillText, { color: statusColor[item.status] }]}>{statusLabel[item.status]}</Text>
+                </View>
+                {item.account && (
+                  <Text style={[styles.account, { color: theme.muted, borderColor: theme.border }]}>{item.account}</Text>
+                )}
+                {ctx != null && (
+                  <View style={styles.ctx}>
+                    <View style={[styles.meter, { backgroundColor: theme.border }]}>
+                      <View style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]} />
+                    </View>
+                    <Text style={[styles.ctxText, { color: theme.muted }]}>ctx {ctx}%</Text>
+                  </View>
                 )}
               </View>
             </View>
           </Pressable>
-        )}
-      />
-    </View>
+        );
+      }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitle: { fontSize: 20, fontWeight: '600' },
-  usage: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  usageItem: { fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  error: { padding: 12, textAlign: 'center' },
-  empty: { padding: 32, textAlign: 'center' },
-  row: { flexDirection: 'row', gap: 12, padding: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 20, fontWeight: '600' },
-  dot: { position: 'absolute', right: 0, bottom: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
-  body: { flex: 1, gap: 2 },
-  line: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  content: { paddingHorizontal: 14, paddingBottom: 24, gap: 10 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 2 },
+  headerTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  usage: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 8 },
+  usageCard: { flexGrow: 1, minWidth: '22%', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, gap: 2 },
+  usageLabel: { fontSize: 11 },
+  usageValue: { fontSize: 16, fontWeight: '700' },
+  error: { paddingVertical: 8, textAlign: 'center' },
+  empty: { alignItems: 'center', gap: 10, paddingVertical: 48 },
+  card: { flexDirection: 'row', gap: 12, padding: 14, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
+  avatar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 19, fontWeight: '700' },
+  body: { flex: 1, gap: 4 },
+  line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
   name: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
+  time: { fontSize: 12 },
+  preview: { fontSize: 14, lineHeight: 19 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  pillText: { fontSize: 11, fontWeight: '600' },
+  account: { fontSize: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  ctx: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
+  meter: { width: 44, height: 4, borderRadius: 2, overflow: 'hidden' },
+  meterFill: { height: 4, borderRadius: 2 },
+  ctxText: { fontSize: 11 },
 });
