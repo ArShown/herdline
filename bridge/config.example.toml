@@ -1,0 +1,17 @@
+# Copy to ~/.config/herdline/config.toml
+
+# Listen on the Tailscale address only (`tailscale ip -4`), never 0.0.0.0.
+host = "127.0.0.1"
+port = 8787
+
+# Claude Code config directories; transcripts are read from <dir>/projects.
+config_dirs = ["~/.claude"]
+
+# Where the status line script writes <session_id>.json with used_percentage.
+context_dir = "~/.claude/state/ctx"
+
+state_dir = "~/.local/state/herdline"
+
+# herdr workspace label = name shown on the phone
+[aliases]
+# my_api = "API"
