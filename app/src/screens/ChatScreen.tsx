@@ -18,9 +18,11 @@ import {
   type ImageLoadEventData,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
 import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
+import { loadDraft, saveDraft } from '../drafts';
 import { Markdown } from '../Markdown';
 import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
 import { Sheet } from '../Sheet';
@@ -75,9 +77,11 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>(contact.status);
   const [account, setAccount] = useState<string | null>(contact.account ?? null);
-  const [draft, setDraft] = useState('');
-  const [picked, setPicked] = useState<Marked[]>([]);
-  const [files, setFiles] = useState<OutgoingFile[]>([]);
+  const insets = useSafeAreaInsets();
+  const [initial] = useState(() => loadDraft(contact.id));
+  const [draft, setDraft] = useState(initial.text);
+  const [picked, setPicked] = useState<Marked[]>(initial.picked);
+  const [files, setFiles] = useState<OutgoingFile[]>(initial.files);
   const [sheet, setSheet] = useState(false);
   const [sending, setSending] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -114,6 +118,9 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       setError('連不上電腦');
     }
   }, [server, contact.id]);
+
+  // Keep what is typed but not sent, so leaving the chat or closing the app does not lose it.
+  useEffect(() => saveDraft(contact.id, { text: draft, picked, files }), [contact.id, draft, picked, files]);
 
   // Poll faster while a reply is on its way.
   usePolling(load, status === 'working' || sending || pending ? 2_000 : 8_000);
@@ -187,7 +194,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       setStatus('working');
       await load();
     } catch (e) {
-      // Put it back so nothing typed is lost.
+      // Put it back so nothing typed is lost, even if the chat was closed while sending.
+      saveDraft(contact.id, { text, picked: outgoing.picked, files: outgoing.files });
       setPending(null);
       setDraft(text);
       setPicked(outgoing.picked);
@@ -255,6 +263,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     <KeyboardAvoidingView
       style={[styles.wrap, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // The chat starts below the safe area, but the keyboard's position is measured from the top of the screen.
+      keyboardVerticalOffset={insets.top}
     >
       <View style={[styles.header, { borderColor: theme.border }]}>
         <Pressable onPress={onBack} hitSlop={12}>
