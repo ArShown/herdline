@@ -36,13 +36,20 @@ const DIALOG_KEYS: { key: string; icon?: 'arrow-up' | 'arrow-down'; label?: stri
   { key: 'esc', label: 'Esc' },
 ];
 const MAX_ATTACHMENTS = 6;
-const MAX_IMAGE_HEIGHT = 480;
+const THUMB_HEIGHT = 160;
+type Size = { width: number; height: number };
 
-/** Size for an image shown on its own row: as wide as allowed, keeping its shape, never too tall. */
-function fit(ratio: number | undefined, maxWidth: number) {
-  const r = ratio ?? 4 / 3;
-  const width = Math.min(maxWidth, MAX_IMAGE_HEIGHT * r);
-  return { width, height: width / r };
+/** Thumbnail size like the Claude app: a fixed height keeping the image's shape, never enlarged past its own size. */
+function fit(size: Size | undefined, maxWidth: number) {
+  if (!size) return { width: THUMB_HEIGHT, height: THUMB_HEIGHT };
+  const r = size.width / size.height;
+  let height = Math.min(THUMB_HEIGHT, size.height);
+  let width = height * r;
+  if (width > maxWidth) {
+    width = maxWidth;
+    height = width / r;
+  }
+  return { width, height };
 }
 
 type Props = { server: Server; contact: Contact; onBack: () => void };
@@ -80,12 +87,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [screen, setScreen] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageSource | null>(null);
-  const [ratios, setRatios] = useState<Record<string, number>>({});
+  const [sizes, setSizes] = useState<Record<string, Size>>({});
   const { width: screenWidth } = useWindowDimensions();
   const contentWidth = screenWidth - 32;
   const measure = (key: string) => (e: NativeSyntheticEvent<ImageLoadEventData>) => {
     const { width, height } = e.nativeEvent.source ?? {};
-    if (width && height && ratios[key] !== width / height) setRatios((r) => ({ ...r, [key]: width / height }));
+    if (width && height && sizes[key]?.width !== width) setSizes((s) => ({ ...s, [key]: { width, height } }));
   };
   const [menu, setMenu] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -224,7 +231,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
               server={server}
               path={path}
               onLoad={measure(path)}
-              style={[styles.photo, fit(ratios[path], mine ? contentWidth * 0.75 : contentWidth), { backgroundColor: theme.surface }]}
+              style={[styles.photo, fit(sizes[path], contentWidth * 0.75), { backgroundColor: theme.surface }]}
             />
           </Pressable>
         ))}
@@ -324,7 +331,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
                       key={uri}
                       source={{ uri }}
                       onLoad={measure(uri)}
-                      style={[styles.photo, fit(ratios[uri], contentWidth * 0.75), { backgroundColor: theme.surface }]}
+                      style={[styles.photo, fit(sizes[uri], contentWidth * 0.75), { backgroundColor: theme.surface }]}
                     />
                   ))}
                 </View>
@@ -514,8 +521,8 @@ const styles = StyleSheet.create({
   userBubble: { maxWidth: '85%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
   userText: { fontSize: 16, lineHeight: 23 },
   assistantRow: { gap: 8, marginVertical: 10 },
-  images: { gap: 8 },
-  imagesMine: { alignItems: 'flex-end' },
+  images: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  imagesMine: { justifyContent: 'flex-end' },
   photo: { borderRadius: 12 },
   error: { textAlign: 'center', padding: 6 },
   composer: {
