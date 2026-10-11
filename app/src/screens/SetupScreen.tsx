@@ -1,6 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, ApiError, type Server } from '../api';
 import { saveServer } from '../settings';
 import { useTheme } from '../theme';
@@ -34,9 +33,7 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
   return (
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
       <View style={styles.brand}>
-        <View style={[styles.logo, { backgroundColor: theme.accent }]}>
-          <Ionicons name="chatbubbles" size={30} color="#fff" />
-        </View>
+        <Image source={require('../../assets/logo.png')} style={styles.logo} />
         <Text style={[styles.title, { color: theme.text }]}>herdline</Text>
         <Text style={{ color: theme.muted }}>輸入電腦端產生的金鑰</Text>
       </View>
@@ -77,7 +74,7 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
 const styles = StyleSheet.create({
   wrap: { flex: 1, padding: 24, gap: 12, justifyContent: 'center' },
   brand: { alignItems: 'center', gap: 8, marginBottom: 20 },
-  logo: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  logo: { width: 88, height: 88, borderRadius: 22, marginBottom: 6 },
   title: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
   input: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
   button: { borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
