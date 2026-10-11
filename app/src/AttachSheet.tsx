@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Sheet } from './Sheet';
 import type { Theme } from './theme';
 
-// Words the user types often, most used first; tapping one puts it in the message box.
+// Words the user types often, most used first; tapping one sends it at once.
 export const SHORTCUTS = ['好', 'lgtm', 'welldone', '繼續', '我回來了', '夜哨', '早上好'];
 
 type Props = {
@@ -14,10 +14,11 @@ type Props = {
   onPhotos: () => void;
   onFiles: () => void;
   onShortcut: (text: string) => void;
+  onStop: () => void;
 };
 
 /** The sheet behind the composer's "+" button. */
-export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShortcut }: Props) {
+export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShortcut, onStop }: Props) {
   const option = (label: string, icon: ComponentProps<typeof Ionicons>['name'], onPress: () => void) => (
     <Pressable
       style={[styles.option, { backgroundColor: theme.bg }]}
@@ -51,6 +52,16 @@ export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShor
         <Text style={[styles.section, { color: theme.muted }]}>快捷</Text>
       </View>
       <ScrollView style={styles.shortcuts} contentContainerStyle={styles.shortcutsContent}>
+        <Pressable
+          style={[styles.chip, { backgroundColor: theme.bg }]}
+          onPress={() => {
+            onClose();
+            onStop();
+          }}
+        >
+          <Text style={{ color: theme.danger, fontSize: 16 }}>停止動作</Text>
+          <Ionicons name="stop-circle-outline" size={20} color={theme.danger} />
+        </Pressable>
         {SHORTCUTS.map((word) => (
           <Pressable
             key={word}

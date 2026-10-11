@@ -178,31 +178,58 @@ export function ChatScreen({ server, contact, onBack }: Props) {
 
   const canSend = (draft.trim() || picked.length > 0 || files.length > 0) && !sending;
 
-  const send = async () => {
-    if (!canSend) return;
-    const text = draft.trim();
-    const outgoing = { picked, files };
-    // Show the message and clear the composer first, so it is clear the tap went through.
-    setPending({ text, images: picked.map((p) => p.uri), files: files.map((f) => f.name), sentAt: Date.now() });
-    setDraft('');
-    setPicked([]);
-    setFiles([]);
+  // Show the message at once so it is clear the tap went through; `restore` puts it back if sending fails.
+  const deliver = async (text: string, images: Marked[], attached: OutgoingFile[], restore?: () => void) => {
+    setPending({ text, images: images.map((p) => p.uri), files: attached.map((f) => f.name), sentAt: Date.now() });
     setError(null);
     setSending(true);
     try {
-      await api.send(server, contact.id, text, outgoing.picked.map(({ type, data }) => ({ type, data })), outgoing.files);
+      await api.send(server, contact.id, text, images.map(({ type, data }) => ({ type, data })), attached);
       setStatus('working');
       await load();
     } catch (e) {
-      // Put it back so nothing typed is lost, even if the chat was closed while sending.
-      saveDraft(contact.id, { text, picked: outgoing.picked, files: outgoing.files });
       setPending(null);
+      restore?.();
+      setError(
+        e instanceof ApiError && e.code === 'agent_blocked'
+          ? '正在等你確認，先處理畫面上的問題，訊息沒送出'
+          : restore
+            ? '沒送出去，訊息放回輸入框了'
+            : `「${text}」沒送出去`,
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const send = () => {
+    if (!canSend) return;
+    const text = draft.trim();
+    const outgoing = { picked, files };
+    setDraft('');
+    setPicked([]);
+    setFiles([]);
+    deliver(text, outgoing.picked, outgoing.files, () => {
+      // Saved directly too, in case the chat was closed while sending.
+      saveDraft(contact.id, { text, picked: outgoing.picked, files: outgoing.files });
       setDraft(text);
       setPicked(outgoing.picked);
       setFiles(outgoing.files);
-      setError(e instanceof ApiError && e.code === 'agent_blocked' ? '正在等你確認，先處理畫面上的問題，訊息沒送出' : '沒送出去，訊息放回輸入框了');
-    } finally {
-      setSending(false);
+    });
+  };
+
+  // A shortcut goes out on its own and leaves whatever is being typed in the box.
+  const sendShortcut = (word: string) => {
+    if (!sending) deliver(word, [], []);
+  };
+
+  // Esc interrupts what Claude is doing, the same as pressing it at the computer.
+  const stop = async () => {
+    try {
+      await api.keys(server, contact.id, ['esc']);
+      setTimeout(load, 600);
+    } catch {
+      setError('停不下來，連不上電腦');
     }
   };
 
@@ -481,7 +508,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         onClose={() => setSheet(false)}
         onPhotos={() => room > 0 && pickImages()}
         onFiles={() => room > 0 && pickFiles()}
-        onShortcut={(word) => setDraft((d) => (d.trim() ? `${d.trim()} ${word}` : word))}
+        onShortcut={sendShortcut}
+        onStop={stop}
       />
       <MarkupViewer
         server={server}
