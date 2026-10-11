@@ -70,7 +70,7 @@ class Api:
             return 404, {'error': 'contact_not_found'}
         route = (method, parts[3])
         if route == ('GET', 'messages'):
-            return 200, self.messages(contact, int(query.get('limit', 50)))
+            return 200, self.messages(contact, int(query.get('limit', 50)), query.get('before'))
         if route == ('POST', 'messages'):
             body = body or {}
             return self.send(contact, body.get('text', ''), body.get('images') or [], body.get('files') or [])
@@ -119,13 +119,23 @@ class Api:
             })
         return rows
 
-    def messages(self, contact, limit: int) -> dict:
+    def messages(self, contact, limit: int, before: str | None = None) -> dict:
+        """The latest messages, or with `before` the page older than that message id."""
         path = contacts_mod.transcript(self.config, contact)
+        limit = min(limit, 200)
+        if not path:
+            found, more = [], False
+        elif before:
+            found, more = transcripts.before(path, before, limit)
+        else:
+            found = transcripts.tail(path, limit)
+            more = len(found) == limit
         return {
             'status': contact.status,
             'session_id': contact.session_id,
             'account': self.config.account_of(path),
-            'messages': [self._public(m, contact.session_id) for m in transcripts.tail(path, min(limit, 200))] if path else [],
+            'messages': [self._public(m, contact.session_id) for m in found],
+            'has_more': more,
         }
 
     def _public(self, message: dict, session_id: str | None = None, with_images: bool = True) -> dict:

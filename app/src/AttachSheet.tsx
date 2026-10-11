@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Theme } from './theme';
 
 // Words the user types often, most used first; tapping one puts it in the message box.
@@ -34,40 +34,42 @@ export function AttachSheet({ visible, theme, onClose, onPhotos, onFiles, onShor
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.surface }]}>
-        <View style={[styles.handle, { backgroundColor: theme.border }]} />
-        <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={10} style={[styles.close, { borderColor: theme.border }]}>
-            <Ionicons name="close" size={20} color={theme.text} />
-          </Pressable>
-          <Text style={[styles.title, { color: theme.text }]}>加入</Text>
-          <View style={styles.spacer} />
-        </View>
-        <View style={styles.row}>
-          {option('圖片', 'image-outline', onPhotos)}
-          {option('檔案', 'attach', onFiles)}
-        </View>
-        <View style={styles.sectionRow}>
-          <Ionicons name="flash-outline" size={14} color={theme.muted} />
-          <Text style={[styles.section, { color: theme.muted }]}>快捷</Text>
-        </View>
-        <ScrollView style={styles.shortcuts} contentContainerStyle={styles.shortcutsContent}>
-          {SHORTCUTS.map((word) => (
-            <Pressable
-              key={word}
-              style={[styles.chip, { backgroundColor: theme.bg }]}
-              onPress={() => {
-                onClose();
-                onShortcut(word);
-              }}
-            >
-              <Text style={{ color: theme.text, fontSize: 16 }}>{word}</Text>
-              <Ionicons name="arrow-up-circle-outline" size={20} color={theme.muted} />
+      <SafeAreaProvider>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.surface }]}>
+          <View style={[styles.handle, { backgroundColor: theme.border }]} />
+          <View style={styles.header}>
+            <Pressable onPress={onClose} hitSlop={10} style={[styles.close, { borderColor: theme.border }]}>
+              <Ionicons name="close" size={20} color={theme.text} />
             </Pressable>
-          ))}
-        </ScrollView>
-      </SafeAreaView>
+            <Text style={[styles.title, { color: theme.text }]}>加入</Text>
+            <View style={styles.spacer} />
+          </View>
+          <View style={styles.row}>
+            {option('圖片', 'image-outline', onPhotos)}
+            {option('檔案', 'attach', onFiles)}
+          </View>
+          <View style={styles.sectionRow}>
+            <Ionicons name="flash-outline" size={14} color={theme.muted} />
+            <Text style={[styles.section, { color: theme.muted }]}>快捷</Text>
+          </View>
+          <ScrollView style={styles.shortcuts} contentContainerStyle={styles.shortcutsContent}>
+            {SHORTCUTS.map((word) => (
+              <Pressable
+                key={word}
+                style={[styles.chip, { backgroundColor: theme.bg }]}
+                onPress={() => {
+                  onClose();
+                  onShortcut(word);
+                }}
+              >
+                <Text style={{ color: theme.text, fontSize: 16 }}>{word}</Text>
+                <Ionicons name="arrow-up-circle-outline" size={20} color={theme.muted} />
+              </Pressable>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }

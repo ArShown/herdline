@@ -147,6 +147,35 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([(m['role'], m['text']) for m in body['messages']],
                          [('user', 'question'), ('assistant', 'checking'), ('assistant', 'answer')])
 
+    def test_scroll_back_pages_through_older_messages(self):
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [entry('assistant', [{'type': 'text', 'text': f'm{i}'}], f'a-{i:02d}')
+                                        for i in range(10)])
+        _, latest = self.api.handle('GET', '/api/contacts/w1/messages', {'limit': '4'}, None)
+        self.assertEqual([m['text'] for m in latest['messages']], ['m6', 'm7', 'm8', 'm9'])
+        self.assertTrue(latest['has_more'])
+        _, page = self.api.handle('GET', '/api/contacts/w1/messages', {'limit': '4', 'before': 'a-06'}, None)
+        self.assertEqual([m['text'] for m in page['messages']], ['m2', 'm3', 'm4', 'm5'])
+        self.assertTrue(page['has_more'])
+        _, last = self.api.handle('GET', '/api/contacts/w1/messages', {'limit': '4', 'before': 'a-02'}, None)
+        self.assertEqual([m['text'] for m in last['messages']], ['m0', 'm1'])
+        self.assertFalse(last['has_more'])
+        _, gone = self.api.handle('GET', '/api/contacts/w1/messages', {'before': 'missing'}, None)
+        self.assertEqual((gone['messages'], gone['has_more']), ([], False))
+
+    def test_messages_from_other_sessions_are_not_the_person(self):
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [
+            entry('user', 'typed', 'u-01', origin={'kind': 'human'}),
+            entry('user', 'Another Claude session sent a message:\n<teammate-message>x', 'u-02'),
+            entry('user', 'peer says hi', 'u-03', origin={'kind': 'peer'}),
+            entry('user', 'task done', 'u-04', origin={'kind': 'task-notification'}),
+            entry('user', '[Request interrupted by user]', 'u-05'),
+            entry('user', 'old transcript without origin', 'u-06'),
+        ])
+        status, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
+        self.assertEqual([m['text'] for m in body['messages']], ['typed', 'old transcript without origin'])
+
     def test_tail_reads_only_the_end_of_big_files(self):
         lines = [entry('assistant', [{'type': 'text', 'text': 'x' * 2000}], f'a-{i:06d}')
                  for i in range(400)]

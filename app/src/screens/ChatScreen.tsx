@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
 import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
@@ -32,6 +32,22 @@ const MAX_ATTACHMENTS = 6;
 
 type Props = { server: Server; contact: Contact; onBack: () => void };
 
+// A message on its way: shown at once, dropped when the transcript has it.
+type Pending = { text: string; images: string[]; files: string[]; sentAt: number };
+
+const PENDING_ID = 'pending';
+
+function pendingMessage(p: Pending): Message {
+  return { id: PENDING_ID, role: 'user', text: p.text, ts: new Date(p.sentAt).toISOString() };
+}
+
+/** Keep pages already scrolled back to, then the latest page from the bridge. */
+function mergeLatest(current: Message[], latest: Message[]): Message[] {
+  if (!latest.length) return current.length ? current : latest;
+  const start = current.findIndex((m) => m.id === latest[0].id);
+  return start >= 0 ? [...current.slice(0, start), ...latest] : latest;
+}
+
 export function ChatScreen({ server, contact, onBack }: Props) {
   const theme = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,6 +58,10 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [files, setFiles] = useState<OutgoingFile[]>([]);
   const [sheet, setSheet] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const firstLoad = useRef(true);
   const [error, setError] = useState<string | null>(null);
   const [screen, setScreen] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageSource | null>(null);
@@ -53,7 +73,11 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const load = useCallback(async () => {
     try {
       const data = await api.messages(server, contact.id);
-      setMessages(data.messages);
+      setMessages((current) => mergeLatest(current, data.messages));
+      if (firstLoad.current) {
+        firstLoad.current = false;
+        setHasMore(data.has_more);
+      }
       setStatus(data.status);
       setAccount(data.account);
       setError(null);
@@ -63,7 +87,36 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   }, [server, contact.id]);
 
   // Poll faster while a reply is on its way.
-  usePolling(load, status === 'working' || sending ? 2_000 : 8_000);
+  usePolling(load, status === 'working' || sending || pending ? 2_000 : 8_000);
+
+  // The transcript now has what was sent, so the placeholder can go.
+  useEffect(() => {
+    if (!pending || sending) return;
+    const arrived = messages.some((m) => m.role === 'user' && Date.parse(m.ts) >= pending.sentAt - 5_000);
+    if (arrived) setPending(null);
+  }, [messages, pending, sending]);
+
+  // In case the phone and computer clocks disagree, do not keep the placeholder forever.
+  useEffect(() => {
+    if (!pending || sending) return;
+    const timer = setTimeout(() => setPending(null), 60_000);
+    return () => clearTimeout(timer);
+  }, [pending, sending]);
+
+  const loadOlder = async () => {
+    const first = messages[0];
+    if (!hasMore || loadingOlder || !first) return;
+    setLoadingOlder(true);
+    try {
+      const data = await api.messages(server, contact.id, first.id);
+      setMessages((current) => (current[0]?.id === first.id ? [...data.messages, ...current] : current));
+      setHasMore(data.has_more);
+    } catch {
+      setError('讀不到更早的訊息');
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const pickImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -91,16 +144,26 @@ export function ChatScreen({ server, contact, onBack }: Props) {
 
   const send = async () => {
     if (!canSend) return;
+    const text = draft.trim();
+    const outgoing = { picked, files };
+    // Show the message and clear the composer first, so it is clear the tap went through.
+    setPending({ text, images: picked.map((p) => p.uri), files: files.map((f) => f.name), sentAt: Date.now() });
+    setDraft('');
+    setPicked([]);
+    setFiles([]);
+    setError(null);
     setSending(true);
     try {
-      await api.send(server, contact.id, draft.trim(), picked.map(({ type, data }) => ({ type, data })), files);
-      setDraft('');
-      setPicked([]);
-      setFiles([]);
+      await api.send(server, contact.id, text, outgoing.picked.map(({ type, data }) => ({ type, data })), outgoing.files);
       setStatus('working');
       await load();
     } catch (e) {
-      setError(e instanceof ApiError && e.code === 'agent_blocked' ? '正在等你確認，先處理畫面上的問題' : '沒送出去');
+      // Put it back so nothing typed is lost.
+      setPending(null);
+      setDraft(text);
+      setPicked(outgoing.picked);
+      setFiles(outgoing.files);
+      setError(e instanceof ApiError && e.code === 'agent_blocked' ? '正在等你確認，先處理畫面上的問題，訊息沒送出' : '沒送出去，訊息放回輸入框了');
     } finally {
       setSending(false);
     }
@@ -207,16 +270,42 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       <FlatList
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        data={[...messages].reverse()}
+        data={pending ? [pendingMessage(pending), ...[...messages].reverse()] : [...messages].reverse()}
         inverted
+        onEndReached={loadOlder}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          loadingOlder ? (
+            <ActivityIndicator style={styles.older} color={theme.muted} />
+          ) : !hasMore && messages.length > 0 ? (
+            <Text style={[styles.olderText, { color: theme.muted }]}>沒有更早的訊息了</Text>
+          ) : null
+        }
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          status === 'working' || sending ? <ThinkingDots color={theme.muted} label={sending ? '傳送中' : '思考中'} /> : null
+          status === 'working' && !sending ? <ThinkingDots color={theme.muted} label="思考中" /> : null
         }
         keyExtractor={(m, i) => m.id ?? String(i)}
         renderItem={({ item }) =>
-          item.role === 'user' ? (
+          item.id === PENDING_ID && pending ? (
+            <View style={[styles.userRow, styles.pendingRow]}>
+              {pending.images.length > 0 && (
+                <View style={[styles.images, styles.imagesMine]}>
+                  {pending.images.map((uri) => (
+                    <Image key={uri} source={{ uri }} style={[styles.thumb, { backgroundColor: theme.surface }]} />
+                  ))}
+                </View>
+              )}
+              {renderFiles(pending.files, true)}
+              {!!pending.text && (
+                <View style={[styles.userBubble, { backgroundColor: theme.bubble }]}>
+                  <Text style={[styles.userText, { color: theme.text }]}>{pending.text}</Text>
+                </View>
+              )}
+              <Text style={[styles.pendingText, { color: theme.muted }]}>{sending ? '傳送中…' : '已送出'}</Text>
+            </View>
+          ) : item.role === 'user' ? (
             <View style={styles.userRow}>
               {renderImages(item.images, true)}
               {renderFiles(item.files, true)}
@@ -300,44 +389,46 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       </View>
 
       <Modal visible={menu} transparent animationType="slide" onRequestClose={() => setMenu(false)}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => {
-            setMenu(false);
-            setConfirmBusy(false);
-          }}
-        />
-        <SafeAreaView edges={['bottom']} style={[styles.menu, { backgroundColor: theme.surface }]}>
-          <View style={[styles.handle, { backgroundColor: theme.border }]} />
+        <SafeAreaProvider>
           <Pressable
-            style={[styles.menuItem, { backgroundColor: theme.bg }]}
+            style={styles.backdrop}
             onPress={() => {
               setMenu(false);
-              showScreen();
+              setConfirmBusy(false);
             }}
-          >
-            <Ionicons name="desktop-outline" size={20} color={theme.text} />
-            <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
-          </Pressable>
-          {confirmBusy ? (
-            <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
-              <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
-              <View style={styles.confirmRow}>
-                <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmBusy(false)}>
-                  <Text style={{ color: theme.text }}>先不要</Text>
-                </Pressable>
-                <Pressable style={[styles.confirmButton, { backgroundColor: theme.danger, borderColor: theme.danger }]} onPress={() => exit(true)}>
-                  {exiting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>結束</Text>}
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <Pressable style={[styles.menuItem, { backgroundColor: theme.bg }]} disabled={exiting} onPress={() => exit(false)}>
-              {exiting ? <ActivityIndicator /> : <Ionicons name="exit-outline" size={20} color={theme.danger} />}
-              <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
+          />
+          <SafeAreaView edges={['bottom']} style={[styles.menu, { backgroundColor: theme.surface }]}>
+            <View style={[styles.handle, { backgroundColor: theme.border }]} />
+            <Pressable
+              style={[styles.menuItem, { backgroundColor: theme.bg }]}
+              onPress={() => {
+                setMenu(false);
+                showScreen();
+              }}
+            >
+              <Ionicons name="desktop-outline" size={20} color={theme.text} />
+              <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
             </Pressable>
-          )}
-        </SafeAreaView>
+            {confirmBusy ? (
+              <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+                <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
+                <View style={styles.confirmRow}>
+                  <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmBusy(false)}>
+                    <Text style={{ color: theme.text }}>先不要</Text>
+                  </Pressable>
+                  <Pressable style={[styles.confirmButton, { backgroundColor: theme.danger, borderColor: theme.danger }]} onPress={() => exit(true)}>
+                    {exiting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>結束</Text>}
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable style={[styles.menuItem, { backgroundColor: theme.bg }]} disabled={exiting} onPress={() => exit(false)}>
+                {exiting ? <ActivityIndicator /> : <Ionicons name="exit-outline" size={20} color={theme.danger} />}
+                <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
+              </Pressable>
+            )}
+          </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
       <AttachSheet
         visible={sheet}
@@ -382,6 +473,10 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingVertical: 12 },
   userRow: { alignItems: 'flex-end', gap: 6, marginVertical: 10 },
+  pendingRow: { opacity: 0.7, marginBottom: 4 },
+  pendingText: { fontSize: 12 },
+  older: { paddingVertical: 16 },
+  olderText: { textAlign: 'center', fontSize: 12, paddingVertical: 16 },
   userBubble: { maxWidth: '85%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
   userText: { fontSize: 16, lineHeight: 23 },
   assistantRow: { gap: 8, marginVertical: 10 },

@@ -50,8 +50,12 @@ const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id)}`;
 
 export const api = {
   contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null }>(s, 'GET', '/api/contacts'),
-  messages: (s: Server, id: string, limit = 50) =>
-    call<{ status: Status; session_id: string; account: string | null; messages: Message[] }>(s, 'GET', `${contactPath(id)}/messages?limit=${limit}`),
+  messages: (s: Server, id: string, before?: string, limit = 50) =>
+    call<{ status: Status; session_id: string; account: string | null; messages: Message[]; has_more: boolean }>(
+      s,
+      'GET',
+      `${contactPath(id)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+    ),
   send: (s: Server, id: string, text: string, images: OutgoingImage[] = [], files: OutgoingFile[] = []) =>
     call(s, 'POST', `${contactPath(id)}/messages`, { text, images, files }),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),

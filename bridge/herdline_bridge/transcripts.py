@@ -6,12 +6,16 @@ from pathlib import Path
 
 CHUNK = 256 * 1024
 MAX_BYTES = 4 * 1024 * 1024
+# Scrolling back may read further, since tool output makes long sessions large.
+OLDER_MAX_BYTES = 64 * 1024 * 1024
 _REMINDER = re.compile(r'<system-reminder>.*?</system-reminder>', re.S)
 IMAGE_MARK = re.compile(r'\[image: (\S+)\]')
 FILE_MARK = re.compile(r'\[file: (\S+)\]')
 # Uploaded files are saved as "<time>-<random>-<original name>".
 UPLOAD_PREFIX_FORMAT = '{}-{}-'
 _UPLOAD_PREFIX = re.compile(r'^\d{8}-\d{6}-[0-9a-f]{8}-')
+# Text Claude Code puts in a user turn that the person did not type (older transcripts have no origin field).
+_INJECTED_PREFIXES = ('Another Claude session sent a message', '[Request interrupted by user')
 IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
 
 _paths: dict[str, Path] = {}
@@ -62,6 +66,14 @@ def _images_of(content) -> list[dict]:
     return images
 
 
+def _typed_by_person(entry: dict, text: str) -> bool:
+    """A user turn the person wrote, not a message from another session, a task notice or an interrupt marker."""
+    origin = entry.get('origin')
+    if origin is not None:
+        return isinstance(origin, dict) and origin.get('kind') == 'human'
+    return not text.startswith(_INJECTED_PREFIXES)
+
+
 def to_message(entry: dict) -> dict | None:
     kind = entry.get('type')
     # isCompactSummary: the summary Claude Code injects after compacting, not something the user said.
@@ -74,6 +86,8 @@ def to_message(entry: dict) -> dict | None:
     text = _REMINDER.sub('', _text_of(content)).strip()
     # Slash-command echoes and harness notices are not part of the conversation.
     if text.startswith('<'):
+        return None
+    if kind == 'user' and not _typed_by_person(entry, text):
         return None
     images = _images_of(content)
     # Images the phone attached are sent as "[image: /path]" lines.
@@ -121,6 +135,27 @@ def tail(path: Path, limit: int = 50) -> list[dict]:
             read = min(size, read * 2, MAX_BYTES)
     _cache[path] = (stat.st_size, stat.st_mtime, limit, messages)
     return messages[-limit:]
+
+
+def before(path: Path, message_id: str, limit: int = 50) -> tuple[list[dict], bool]:
+    """Up to `limit` messages older than `message_id`, and whether even older ones exist."""
+    size = path.stat().st_size
+    read = min(size, CHUNK)
+    with path.open('rb') as f:
+        while True:
+            f.seek(size - read)
+            lines = f.read(read).split(b'\n')
+            if read < size:
+                lines = lines[1:]
+            messages = _parse([line for line in lines if line.strip()])
+            index = next((i for i, m in enumerate(messages) if m['id'] == message_id), None)
+            whole = read >= size or read >= OLDER_MAX_BYTES
+            if whole or (index is not None and index > limit):
+                break
+            read = min(size, read * 2, OLDER_MAX_BYTES)
+    if index is None:
+        return [], False
+    return messages[max(0, index - limit):index], index > limit or read < size
 
 
 def mtime(path: Path | None) -> float:

@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import { imageUrl, type OutgoingImage, type Server } from './api';
@@ -99,69 +99,71 @@ export function MarkupViewer({ server, source, onClose, onAttach }: Props) {
 
   return (
     <Modal visible={source != null} animationType="fade" onRequestClose={onClose}>
-      <SafeAreaView style={styles.wrap}>
-        <View style={styles.bar}>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.circle}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-          <Pressable onPress={() => setDrawing((d) => !d)} hitSlop={10} style={[styles.toggle, drawing && styles.toggleOn]}>
-            <Ionicons name={drawing ? 'brush' : 'brush-outline'} size={16} color={drawing ? '#000' : '#fff'} />
-            <Text style={[styles.barText, drawing && styles.toggleOnText]}>標記</Text>
-          </Pressable>
-          <Pressable onPress={attach} disabled={strokes.length === 0} hitSlop={10}>
-            <Text style={[styles.barText, { opacity: strokes.length ? 1 : 0.4 }]}>加到訊息</Text>
-          </Pressable>
-        </View>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.wrap}>
+          <View style={styles.bar}>
+            <Pressable onPress={onClose} hitSlop={10} style={styles.circle}>
+              <Ionicons name="close" size={22} color="#fff" />
+            </Pressable>
+            <Pressable onPress={() => setDrawing((d) => !d)} hitSlop={10} style={[styles.toggle, drawing && styles.toggleOn]}>
+              <Ionicons name={drawing ? 'brush' : 'brush-outline'} size={16} color={drawing ? '#000' : '#fff'} />
+              <Text style={[styles.barText, drawing && styles.toggleOnText]}>標記</Text>
+            </Pressable>
+            <Pressable onPress={attach} disabled={strokes.length === 0} hitSlop={10}>
+              <Text style={[styles.barText, { opacity: strokes.length ? 1 : 0.4 }]}>加到訊息</Text>
+            </Pressable>
+          </View>
 
-        <View style={styles.stage}>
-          {drawing ? (
-            <View ref={canvas} collapsable={false} style={size} {...pan.panHandlers}>
-              {picture}
-              <Svg style={StyleSheet.absoluteFill}>
-                {[...strokes, ...(current ? [{ color, d: current }] : [])].map((s, i) => (
-                  <Path key={i} d={s.d} stroke={s.color} strokeWidth={STROKE} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                ))}
-              </Svg>
-            </View>
-          ) : (
-            <ScrollView
-              maximumZoomScale={5}
-              minimumZoomScale={1}
-              centerContent
-              contentContainerStyle={styles.zoom}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-            >
-              <View ref={canvas} collapsable={false} style={size}>
+          <View style={styles.stage}>
+            {drawing ? (
+              <View ref={canvas} collapsable={false} style={size} {...pan.panHandlers}>
                 {picture}
-                <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-                  {strokes.map((s, i) => (
+                <Svg style={StyleSheet.absoluteFill}>
+                  {[...strokes, ...(current ? [{ color, d: current }] : [])].map((s, i) => (
                     <Path key={i} d={s.d} stroke={s.color} strokeWidth={STROKE} fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   ))}
                 </Svg>
               </View>
-            </ScrollView>
-          )}
-        </View>
-
-        {drawing && (
-          <View style={styles.tools}>
-            {COLORS.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                style={[styles.swatch, { backgroundColor: c, borderWidth: color === c ? 3 : 1 }]}
-              />
-            ))}
-            <Pressable onPress={() => setStrokes((s) => s.slice(0, -1))} hitSlop={10}>
-              <Ionicons name="arrow-undo" size={24} color="#fff" />
-            </Pressable>
-            <Pressable onPress={() => setStrokes([])} hitSlop={10}>
-              <Ionicons name="trash-outline" size={22} color="#fff" />
-            </Pressable>
+            ) : (
+              <ScrollView
+                maximumZoomScale={5}
+                minimumZoomScale={1}
+                centerContent
+                contentContainerStyle={styles.zoom}
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+              >
+                <View ref={canvas} collapsable={false} style={size}>
+                  {picture}
+                  <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                    {strokes.map((s, i) => (
+                      <Path key={i} d={s.d} stroke={s.color} strokeWidth={STROKE} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    ))}
+                  </Svg>
+                </View>
+              </ScrollView>
+            )}
           </View>
-        )}
-      </SafeAreaView>
+
+          {drawing && (
+            <View style={styles.tools}>
+              {COLORS.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => setColor(c)}
+                  style={[styles.swatch, { backgroundColor: c, borderWidth: color === c ? 3 : 1 }]}
+                />
+              ))}
+              <Pressable onPress={() => setStrokes((s) => s.slice(0, -1))} hitSlop={10}>
+                <Ionicons name="arrow-undo" size={24} color="#fff" />
+              </Pressable>
+              <Pressable onPress={() => setStrokes([])} hitSlop={10}>
+                <Ionicons name="trash-outline" size={22} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
