@@ -49,9 +49,10 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(server: Server, method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function call<T>(server: Server, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${server.url.replace(/\/+$/, '')}${path}`, {
     method,
+    signal,
     headers: {
       Authorization: `Bearer ${server.token}`,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
@@ -68,7 +69,8 @@ export const imageUrl = (s: Server, path: string) => `${s.url.replace(/\/+$/, ''
 const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id)}`;
 
 export const api = {
-  contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null; away?: boolean }>(s, 'GET', '/api/contacts'),
+  contacts: (s: Server, signal?: AbortSignal) =>
+    call<{ contacts: Contact[]; usage: string | null; away?: boolean }>(s, 'GET', '/api/contacts', undefined, signal),
   messages: (s: Server, id: string, before?: string, limit = 50) =>
     call<{ status: Status; session_id: string; account: string | null; messages: Message[]; has_more: boolean }>(
       s,

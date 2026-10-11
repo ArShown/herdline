@@ -39,6 +39,7 @@ import { Sheet } from '../Sheet';
 import { useBlockSwipeBack } from '../SwipeBack';
 import { ThinkingDots } from '../ThinkingDots';
 import { statusColor, statusLabel, useTheme } from '../theme';
+import { markSeen } from '../unread';
 import { usePolling } from '../usePolling';
 
 // Keys the bridge accepts; enough to move through a confirmation dialog and pick an option.
@@ -137,6 +138,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     try {
       const data = await api.messages(server, contact.id);
       setMessages((current) => mergeLatest(current, data.messages));
+      const newest = data.messages[data.messages.length - 1];
+      if (newest) markSeen(contact.id, newest);
       if (firstLoad.current) {
         firstLoad.current = false;
         setHasMore(data.has_more);

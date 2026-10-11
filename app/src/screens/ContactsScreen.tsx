@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { api, ApiError, type Contact, type Server } from '../api';
 import { formatTime } from '../format';
 import { avatarColor, meterColor, statusColor, statusLabel, useTheme } from '../theme';
 import { SettingsSheet } from '../SettingsSheet';
+import { isUnread, onSeenChange, updateUnread } from '../unread';
 import { usePolling } from '../usePolling';
 
 type Props = {
@@ -29,11 +30,15 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [settings, setSettings] = useState(false);
+  // Redraw when a conversation is read, without waiting for the next poll.
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => onSeenChange(redraw), []);
 
   const load = useCallback(async () => {
     try {
       const data = await api.contacts(server);
       setContacts(data.contacts);
+      updateUnread(data.contacts);
       setUsage(data.usage);
       setAway(!!data.away);
       setError(null);
@@ -138,7 +143,10 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
                   <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <Text style={[styles.time, { color: theme.muted }]}>{formatTime(item.preview?.ts)}</Text>
+                  <View style={styles.when}>
+                    <Text style={[styles.time, { color: theme.muted }]}>{formatTime(item.preview?.ts)}</Text>
+                    {isUnread(item) && <View style={[styles.unread, { backgroundColor: theme.danger }]} />}
+                  </View>
                 </View>
                 <Text style={[styles.preview, { color: theme.muted }]} numberOfLines={2}>
                   {item.status === 'blocked' ? '正在等你確認' : item.preview?.text ?? item.title ?? ''}
@@ -200,7 +208,9 @@ const styles = StyleSheet.create({
   body: { flex: 1, gap: 4 },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
   name: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
+  when: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   time: { fontSize: 12 },
+  unread: { width: 9, height: 9, borderRadius: 5 },
   preview: { fontSize: 14, lineHeight: 19 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },

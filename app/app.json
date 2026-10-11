@@ -33,7 +33,8 @@
       ],
       "expo-font",
       "expo-secure-store",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-background-fetch"
     ]
   }
 }

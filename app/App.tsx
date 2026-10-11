@@ -8,7 +8,8 @@ import { ChatScreen } from './src/screens/ChatScreen';
 import { ContactsScreen } from './src/screens/ContactsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { SwipeBack } from './src/SwipeBack';
-import { clearServer, loadServer } from './src/settings';
+import { startBadge } from './src/badgeTask';
+import { clearServer, loadServer, upgradeServer } from './src/settings';
 import { useTheme } from './src/theme';
 
 export default function App() {
@@ -19,6 +20,12 @@ export default function App() {
   useEffect(() => {
     loadServer().then(setServer);
   }, []);
+
+  useEffect(() => {
+    if (!server) return;
+    upgradeServer(server).catch(() => {});
+    startBadge();
+  }, [server]);
 
   const logout = useCallback(async () => {
     await clearServer();
