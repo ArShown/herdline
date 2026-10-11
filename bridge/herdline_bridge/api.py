@@ -29,6 +29,8 @@ IMAGE_REGISTRY_SIZE = 500
 
 # Keys the phone may press in a pane: enough to answer a confirmation dialog.
 ALLOWED_KEYS = {'enter', 'esc', 'up', 'down', 'tab', 'y', 'n', *map(str, range(1, 10))}
+# A "!" command goes in only between turns, like typing it at the computer.
+RUNNABLE_STATUSES = {'idle', 'done'}
 
 
 class Binary:
@@ -76,6 +78,8 @@ class Api:
         if route == ('POST', 'messages'):
             body = body or {}
             return self.send(contact, body.get('text', ''), body.get('images') or [], body.get('files') or [])
+        if route == ('POST', 'run'):
+            return self.run(contact, (body or {}).get('command', ''))
         if route == ('GET', 'screen'):
             return 200, {'text': self.herdr.screen(contact.pane)}
         if route == ('POST', 'keys'):
@@ -146,6 +150,8 @@ class Api:
         images = message.get('images') or []
         if with_images:
             out['images'] = [self._register(image, session_id) for image in images]
+        elif message.get('kind') == 'command':
+            out['text'] = f"! {out['text']}"
         elif not out['text']:
             out['text'] = '[圖片]' if images else '[檔案] ' + ', '.join(message.get('files') or [])
         return out
@@ -205,6 +211,11 @@ class Api:
         text = text.strip()
         if not text and not images and not files:
             return 400, {'error': 'empty_text'}
+        # Claude Code runs a prompt starting with "!" as a shell command, so it takes the same checks.
+        if text.startswith('!'):
+            if images or files:
+                return 400, {'error': 'command_with_attachments'}
+            return self.run(contact, text)
         if len(images) + len(files) > MAX_ATTACHMENTS:
             return 400, {'error': 'too_many_attachments'}
         session = contact.session_id
@@ -218,6 +229,21 @@ class Api:
             self.herdr.prompt(contact.pane, text)
         except HerdrError as e:
             # agent_blocked: the session waits on a dialog; the phone shows the screen instead.
+            return 409, {'error': e.code, 'message': str(e)}
+        return 202, {'accepted': True, 'session_id': contact.session_id}
+
+    def run(self, contact, command: str) -> tuple[int, dict]:
+        """Run one shell command in the session, as "!" does at the computer; its output lands in the transcript."""
+        command = (command or '').strip()
+        if command.startswith('!'):
+            command = command[1:].strip()
+        if not command or '\n' in command or '\r' in command:
+            return 400, {'error': 'bad_command'}
+        if contact.status not in RUNNABLE_STATUSES:
+            return 409, {'error': 'agent_blocked' if contact.status == 'blocked' else 'busy'}
+        try:
+            self.herdr.prompt(contact.pane, f'!{command}')
+        except HerdrError as e:
             return 409, {'error': e.code, 'message': str(e)}
         return 202, {'accepted': True, 'session_id': contact.session_id}
 

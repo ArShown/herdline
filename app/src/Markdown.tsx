@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
-import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Theme } from './theme';
 
 // A small Markdown renderer for chat replies: headings, lists, quotes, code, tables, bold, italics, links.
@@ -92,16 +93,30 @@ function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
+/** A suggested "!" command (one line), or null. */
+export function commandIn(code: string): string | null {
+  const match = code.trim().match(/^!\s*([^\n]+)$/);
+  return match ? match[1].trim() : null;
+}
+
+type OnRun = ((command: string) => void) | undefined;
+
 const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)\s]+\))/g;
 
-function inline(text: string, theme: Theme): ReactNode[] {
+function inline(text: string, theme: Theme, onRun?: OnRun): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     if (!part) return null;
     if (part.startsWith('`') && part.endsWith('`') && part.length > 1) {
+      const command = onRun && commandIn(part.slice(1, -1));
       return (
-        <Text key={i} style={[styles.inlineCode, { backgroundColor: theme.code }]}>
-          {part.slice(1, -1)}
-        </Text>
+        <Fragment key={i}>
+          <Text style={[styles.inlineCode, { backgroundColor: theme.code }]}>{part.slice(1, -1)}</Text>
+          {command ? (
+            <Text style={[styles.runInline, { color: theme.accent }]} onPress={() => onRun(command)}>
+              {' '}▶ 執行
+            </Text>
+          ) : null}
+        </Fragment>
       );
     }
     if ((part.startsWith('**') || part.startsWith('__')) && part.length > 4) {
@@ -130,24 +145,35 @@ function inline(text: string, theme: Theme): ReactNode[] {
   });
 }
 
-export function Markdown({ text, theme }: { text: string; theme: Theme }) {
+/** `onRun` adds a run button to suggested "!" commands; it only opens a confirmation, never runs by itself. */
+export function Markdown({ text, theme, onRun }: { text: string; theme: Theme; onRun?: OnRun }) {
   const base = [styles.body, { color: theme.text }];
   return (
     <View style={styles.wrap}>
       {parseBlocks(text).map((block, i) => {
         switch (block.kind) {
-          case 'code':
+          case 'code': {
+            const command = onRun && commandIn(block.text);
             return (
-              <ScrollView key={i} horizontal style={[styles.codeBlock, { backgroundColor: theme.code }]}>
-                <Text selectable style={[styles.mono, { color: theme.text }]}>
-                  {block.text}
-                </Text>
-              </ScrollView>
+              <View key={i} style={styles.codeWrap}>
+                <ScrollView horizontal style={[styles.codeBlock, { backgroundColor: theme.code }]}>
+                  <Text selectable style={[styles.mono, { color: theme.text }]}>
+                    {block.text}
+                  </Text>
+                </ScrollView>
+                {command ? (
+                  <Pressable style={[styles.runButton, { borderColor: theme.accent }]} onPress={() => onRun(command)}>
+                    <Ionicons name="play" size={13} color={theme.accent} />
+                    <Text style={{ color: theme.accent, fontSize: 14 }}>在電腦執行</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             );
+          }
           case 'heading':
             return (
               <Text key={i} style={[base, styles.heading, { fontSize: block.level <= 2 ? 19 : 17 }]}>
-                {inline(block.text, theme)}
+                {inline(block.text, theme, onRun)}
               </Text>
             );
           case 'list':
@@ -157,7 +183,7 @@ export function Markdown({ text, theme }: { text: string; theme: Theme }) {
                   <View key={j} style={styles.listItem}>
                     <Text style={[base, styles.marker]}>{block.ordered ? `${j + 1}.` : '•'}</Text>
                     <Text selectable style={[base, styles.flex]}>
-                      {inline(item, theme)}
+                      {inline(item, theme, onRun)}
                     </Text>
                   </View>
                 ))}
@@ -167,7 +193,7 @@ export function Markdown({ text, theme }: { text: string; theme: Theme }) {
             return (
               <View key={i} style={[styles.quote, { borderColor: theme.border }]}>
                 <Text selectable style={[base, { color: theme.muted }]}>
-                  {inline(block.text, theme)}
+                  {inline(block.text, theme, onRun)}
                 </Text>
               </View>
             );
@@ -183,7 +209,7 @@ export function Markdown({ text, theme }: { text: string; theme: Theme }) {
                           selectable
                           style={[base, styles.tableCell, r === 0 && styles.bold, { borderColor: theme.border }]}
                         >
-                          {inline(cell, theme)}
+                          {inline(cell, theme, onRun)}
                         </Text>
                       ))}
                     </View>
@@ -196,7 +222,7 @@ export function Markdown({ text, theme }: { text: string; theme: Theme }) {
           default:
             return (
               <Text key={i} selectable style={base}>
-                {inline(block.text, theme)}
+                {inline(block.text, theme, onRun)}
               </Text>
             );
         }
@@ -215,6 +241,18 @@ const styles = StyleSheet.create({
   mono: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 13, lineHeight: 19 },
   inlineCode: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 14 },
   codeBlock: { borderRadius: 10, padding: 12 },
+  codeWrap: { gap: 6 },
+  runInline: { fontSize: 14, fontWeight: '600' },
+  runButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   list: { gap: 4 },
   listItem: { flexDirection: 'row', gap: 8 },
   marker: { minWidth: 16 },

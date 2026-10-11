@@ -17,6 +17,12 @@ _UPLOAD_PREFIX = re.compile(r'^\d{8}-\d{6}-[0-9a-f]{8}-')
 # Text Claude Code puts in a user turn that the person did not type (older transcripts have no origin field).
 _INJECTED_PREFIXES = ('Another Claude session sent a message', '[Request interrupted by user')
 IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
+# A "!" command run in the session is logged as one user turn with the command and one with its output.
+_BASH_INPUT = re.compile(r'^<bash-input>(.*)</bash-input>$', re.S)
+_BASH_STREAM = re.compile(r'<bash-(stdout|stderr)>(.*?)</bash-\1>', re.S)
+_ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
+# Long output is cut from the top; the end is where errors show up.
+OUTPUT_LIMIT = 4000
 
 _paths: dict[str, Path] = {}
 _cache: dict[Path, tuple[int, float, int, list[dict]]] = {}
@@ -83,6 +89,21 @@ def _typed_by_person(entry: dict, text: str) -> bool:
     return not text.startswith(_INJECTED_PREFIXES)
 
 
+def _command_of(entry: dict, text: str) -> dict | None:
+    """A "!" command as a message, or its output (merged into the command by _parse)."""
+    match = _BASH_INPUT.match(text)
+    if match:
+        return {'id': entry.get('uuid'), 'role': 'user', 'kind': 'command', 'text': match.group(1).strip(),
+                'ts': entry.get('timestamp'), 'images': [], 'files': []}
+    if text.startswith('<bash-stdout>') or text.startswith('<bash-stderr>'):
+        output = '\n'.join(part.strip('\n') for _, part in _BASH_STREAM.findall(text) if part.strip())
+        output = _ANSI.sub('', output)
+        if len(output) > OUTPUT_LIMIT:
+            output = '…' + output[-OUTPUT_LIMIT:]
+        return {'kind': 'output', 'output': output}
+    return None
+
+
 def to_message(entry: dict) -> dict | None:
     kind = entry.get('type')
     # isCompactSummary: the summary Claude Code injects after compacting, not something the user said.
@@ -93,6 +114,10 @@ def to_message(entry: dict) -> dict | None:
             isinstance(p, dict) and p.get('type') == 'tool_result' for p in content):
         return None
     text = _REMINDER.sub('', _text_of(content)).strip()
+    if kind == 'user':
+        command = _command_of(entry, text)
+        if command:
+            return command
     # Slash-command echoes and harness notices are not part of the conversation.
     if text.startswith('<'):
         return None
@@ -119,7 +144,11 @@ def _parse(lines: list[bytes]) -> list[dict]:
             message = to_message(json.loads(line))
         except ValueError:
             continue
-        if message:
+        if message and message.get('kind') == 'output':
+            # Output belongs to the command just before it; without one (cut off at a read boundary) drop it.
+            if messages and messages[-1].get('kind') == 'command' and 'output' not in messages[-1]:
+                messages[-1]['output'] = message['output']
+        elif message:
             messages.append(message)
     return messages
 

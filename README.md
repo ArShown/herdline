@@ -23,9 +23,12 @@ Endpoints (all need `Authorization: Bearer <token>`):
 - `POST /api/spaces` – open a new space
 - `GET /api/contacts/<id>/messages?limit=50[&before=<message id>]` – latest messages, or the page before a message
 - `POST /api/contacts/<id>/messages` – send text, images and files
+- `POST /api/contacts/<id>/run` – run one shell command in the session, as `!` does at the computer (one line, only while the session is idle; a message starting with `!` takes the same path). Its output shows in the messages
 - `GET /api/contacts/<id>/screen`, `POST /api/contacts/<id>/keys` – see the terminal and answer a dialog
 - `POST /api/contacts/<id>/exit` – end the session and delete its uploads
 - `GET /api/images/<id>` – an image listed in a message
+
+The phone shows a run button on single-line `! command` suggestions in replies; it asks before running. The bridge token can now run shell commands, so keep the bridge on the tailnet only.
 
 Only user turns typed by a person are shown as yours; messages from other sessions and task notices are left out.
 

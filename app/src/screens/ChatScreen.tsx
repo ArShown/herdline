@@ -39,6 +39,8 @@ const DIALOG_KEYS: { key: string; icon?: 'arrow-up' | 'arrow-down'; label?: stri
   { key: 'esc', label: 'Esc' },
 ];
 const MAX_ATTACHMENTS = 6;
+// Lines of command output shown before "show all".
+const OUTPUT_LINES = 12;
 const THUMB_HEIGHT = 160;
 type Size = { width: number; height: number };
 
@@ -102,8 +104,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [menu, setMenu] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [exiting, setExiting] = useState(false);
+  // A command Claude suggested, waiting for the person to confirm it.
+  const [confirmRun, setConfirmRun] = useState<string | null>(null);
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const commandMode = draft.trimStart().startsWith('!');
   const room = MAX_ATTACHMENTS - picked.length - files.length;
-  useBlockSwipeBack(viewing != null || sheet || menu);
+  useBlockSwipeBack(viewing != null || sheet || menu || confirmRun != null);
 
   const load = useCallback(async () => {
     try {
@@ -195,7 +201,11 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       setError(
         e instanceof ApiError && e.code === 'agent_blocked'
           ? '正在等你確認，先處理畫面上的問題，訊息沒送出'
-          : restore
+          : e instanceof ApiError && e.code === 'busy'
+            ? '他還在做事，等他停下來再執行指令'
+            : e instanceof ApiError && e.code === 'command_with_attachments'
+              ? '指令不能夾帶圖片或檔案'
+              : restore
             ? '沒送出去，訊息放回輸入框了'
             : `「${text}」沒送出去`,
       );
@@ -223,6 +233,14 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   // A shortcut goes out on its own and leaves whatever is being typed in the box.
   const sendShortcut = (word: string) => {
     if (!sending) deliver(word, [], []);
+  };
+
+  // A suggested command runs only after the person confirms it here.
+  const runConfirmed = () => {
+    if (!confirmRun || sending) return;
+    const command = confirmRun;
+    setConfirmRun(null);
+    deliver(`!${command}`, [], []);
   };
 
   // Esc interrupts what Claude is doing, the same as pressing it at the computer.
@@ -383,6 +401,31 @@ export function ChatScreen({ server, contact, onBack }: Props) {
               )}
               <Text style={[styles.pendingText, { color: theme.muted }]}>{sending ? '傳送中…' : '已送出'}</Text>
             </View>
+          ) : item.kind === 'command' ? (
+            <View style={[styles.command, { backgroundColor: theme.code, borderColor: theme.border }]}>
+              <Text selectable style={[styles.commandLine, { color: theme.accent }]}>
+                ! {item.text}
+              </Text>
+              {item.output ? (
+                <Pressable
+                  disabled={opened.has(item.id) || item.output.split('\n').length <= OUTPUT_LINES}
+                  onPress={() => setOpened((s) => new Set(s).add(item.id))}
+                >
+                  <Text
+                    selectable
+                    numberOfLines={opened.has(item.id) ? undefined : OUTPUT_LINES}
+                    style={[styles.commandOutput, { color: theme.text }]}
+                  >
+                    {item.output}
+                  </Text>
+                  {!opened.has(item.id) && item.output.split('\n').length > OUTPUT_LINES && (
+                    <Text style={[styles.more, { color: theme.muted }]}>點一下看全部</Text>
+                  )}
+                </Pressable>
+              ) : (
+                <Text style={[styles.more, { color: theme.muted }]}>{status === 'working' ? '執行中…' : '沒有輸出'}</Text>
+              )}
+            </View>
           ) : item.role === 'user' ? (
             <View style={styles.userRow}>
               {renderImages(item.images, true)}
@@ -397,7 +440,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             </View>
           ) : (
             <View style={styles.assistantRow}>
-              {!!item.text && <Markdown text={item.text} theme={theme} />}
+              {!!item.text && <Markdown text={item.text} theme={theme} onRun={setConfirmRun} />}
               {renderImages(item.images, false)}
               {renderFiles(item.files, false)}
             </View>
@@ -407,7 +450,14 @@ export function ChatScreen({ server, contact, onBack }: Props) {
 
       {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
 
-      <View style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <View
+        style={[styles.composer, { backgroundColor: theme.surface, borderColor: commandMode ? theme.accent : theme.border }]}
+      >
+        {commandMode && (
+          <Text style={[styles.modeLabel, { color: theme.accent }]}>
+            <Ionicons name="terminal-outline" size={12} color={theme.accent} /> 指令模式：送出後直接在電腦執行
+          </Text>
+        )}
         {(picked.length > 0 || files.length > 0) && (
           <ScrollView horizontal contentContainerStyle={styles.picked}>
             {files.map((file, i) => (
@@ -441,10 +491,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           </ScrollView>
         )}
         <TextInput
-          style={[styles.input, { color: theme.text }]}
+          style={[styles.input, { color: theme.text }, commandMode && styles.inputCommand]}
           placeholder={`回覆 ${contact.name}`}
           placeholderTextColor={theme.muted}
           multiline
+          autoCapitalize={commandMode ? 'none' : 'sentences'}
+          autoCorrect={!commandMode}
           value={draft}
           onChangeText={setDraft}
         />
@@ -503,6 +555,28 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
           </Pressable>
         )}
+      </Sheet>
+      <Sheet visible={confirmRun != null} onClose={() => setConfirmRun(null)} style={[styles.menu, { backgroundColor: theme.surface }]}>
+        <View style={[styles.handle, { backgroundColor: theme.border }]} />
+        <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+          <Text style={{ color: theme.text, fontSize: 15 }}>在電腦上執行這行指令？輸出會出現在對話裡。</Text>
+          <ScrollView horizontal style={[styles.runPreview, { backgroundColor: theme.code }]}>
+            <Text selectable style={[styles.commandLine, { color: theme.text }]}>
+              ! {confirmRun}
+            </Text>
+          </ScrollView>
+          <View style={styles.confirmRow}>
+            <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmRun(null)}>
+              <Text style={{ color: theme.text }}>取消</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.confirmButton, { backgroundColor: theme.accent, borderColor: theme.accent }]}
+              onPress={runConfirmed}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>執行</Text>
+            </Pressable>
+          </View>
+        </View>
       </Sheet>
       <AttachSheet
         visible={sheet}
@@ -607,6 +681,13 @@ const styles = StyleSheet.create({
   confirm: { borderRadius: 14, padding: 16, gap: 14 },
   confirmRow: { flexDirection: 'row', gap: 10 },
   confirmButton: { flex: 1, alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingVertical: 12 },
+  command: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 6, marginVertical: 10 },
+  commandLine: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 13, fontWeight: '600' },
+  commandOutput: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 12, lineHeight: 17 },
+  more: { fontSize: 12, marginTop: 4 },
+  modeLabel: { fontSize: 12, paddingHorizontal: 4 },
+  inputCommand: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 15 },
+  runPreview: { borderRadius: 10, padding: 12 },
   fileChip: { maxWidth: '85%', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
   pickedFile: { width: 120, height: 64, borderRadius: 10, padding: 8, justifyContent: 'center' },
 });

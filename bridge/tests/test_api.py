@@ -212,6 +212,56 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(self.herdr.keys, [('w2:p1', ['1', 'enter'])])
 
+    def test_run_sends_one_command_between_turns(self):
+        status, _ = self.api.handle('POST', '/api/contacts/w1/run', {}, {'command': ' git status '})
+        self.assertEqual(status, 202)
+        status, _ = self.api.handle('POST', '/api/contacts/w1/run', {}, {'command': '! ls'})
+        self.assertEqual(status, 202)
+        self.assertEqual(self.herdr.prompts, [('w1:p1', '!git status'), ('w1:p1', '!ls')])
+
+    def test_run_rejects_bad_commands_and_busy_sessions(self):
+        for command in ['', '!', 'ls\nrm x', 'ls\rrm x']:
+            status, body = self.api.handle('POST', '/api/contacts/w1/run', {}, {'command': command})
+            self.assertEqual((status, body['error']), (400, 'bad_command'), command)
+        self.herdr._agents[0]['agent_status'] = 'working'
+        status, body = self.api.handle('POST', '/api/contacts/w1/run', {}, {'command': 'ls'})
+        self.assertEqual((status, body['error']), (409, 'busy'))
+        status, body = self.api.handle('POST', '/api/contacts/w2/run', {}, {'command': 'ls'})
+        self.assertEqual((status, body['error']), (409, 'agent_blocked'))
+        self.assertEqual(self.herdr.prompts, [])
+
+    def test_message_starting_with_bang_takes_the_command_checks(self):
+        status, _ = self.api.handle('POST', '/api/contacts/w1/messages', {}, {'text': '!pwd'})
+        self.assertEqual(status, 202)
+        status, body = self.api.handle('POST', '/api/contacts/w1/messages', {}, {
+            'text': '!pwd', 'files': [{'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}]})
+        self.assertEqual((status, body['error']), (400, 'command_with_attachments'))
+        self.herdr._agents[0]['agent_status'] = 'working'
+        self.assertEqual(self.api.handle('POST', '/api/contacts/w1/messages', {}, {'text': '!pwd'})[0], 409)
+        self.assertEqual(self.herdr.prompts, [('w1:p1', '!pwd')])
+
+    def test_commands_show_with_their_output(self):
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [
+            entry('user', '<bash-stdout>orphan</bash-stdout><bash-stderr></bash-stderr>', 'u-00'),
+            entry('user', '<bash-input>git status</bash-input>', 'u-01'),
+            entry('user', '<bash-stdout>\x1b[32mclean\x1b[0m\n</bash-stdout><bash-stderr>warn\n</bash-stderr>', 'u-02'),
+            entry('user', '<bash-input>yes</bash-input>', 'u-03'),
+            entry('user', f'<bash-stdout>{"y" * 5000}</bash-stdout><bash-stderr></bash-stderr>', 'u-04'),
+            entry('user', '<bash-input>true</bash-input>', 'u-05'),
+            entry('assistant', [{'type': 'text', 'text': 'ok'}], 'a-06'),
+        ])
+        _, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
+        commands = [m for m in body['messages'] if m.get('kind') == 'command']
+        self.assertEqual([(m['id'], m['text']) for m in commands], [('u-01', 'git status'), ('u-03', 'yes'), ('u-05', 'true')])
+        self.assertEqual(commands[0]['output'], 'clean\nwarn')
+        self.assertEqual(len(commands[1]['output']), transcripts.OUTPUT_LIMIT + 1)
+        self.assertNotIn('output', commands[2])
+        self.assertEqual(body['messages'][-1]['text'], 'ok')
+        self.write_transcript('s-new', [entry('user', '<bash-input>ls</bash-input>', 'u-07')])
+        _, contacts = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertEqual(contacts['contacts'][0]['preview']['text'], '! ls')
+
     def test_empty_text_and_unknown_contact(self):
         self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': ' '})[0], 400)
         self.assertEqual(self.api.handle('GET', '/api/contacts/nope/messages', {}, None)[0], 404)

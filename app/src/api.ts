@@ -7,6 +7,9 @@ export type Message = {
   ts: string;
   images?: string[];
   files?: string[];
+  /** A shell command run in the session ("!" at the computer); `text` is the command. */
+  kind?: 'command';
+  output?: string;
 };
 
 export type OutgoingImage = { type: string; data: string };
@@ -58,6 +61,7 @@ export const api = {
     ),
   send: (s: Server, id: string, text: string, images: OutgoingImage[] = [], files: OutgoingFile[] = []) =>
     call(s, 'POST', `${contactPath(id)}/messages`, { text, images, files }),
+  run: (s: Server, id: string, command: string) => call(s, 'POST', `${contactPath(id)}/run`, { command }),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),
   keys: (s: Server, id: string, keys: string[]) => call(s, 'POST', `${contactPath(id)}/keys`, { keys }),
   exit: (s: Server, id: string, force = false) => call(s, 'POST', `${contactPath(id)}/exit`, { force }),
