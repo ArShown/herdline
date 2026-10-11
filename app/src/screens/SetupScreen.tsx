@@ -34,7 +34,7 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
     <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
       <View style={styles.brand}>
         <Image source={require('../../assets/logo.png')} style={styles.logo} />
-        <Text style={[styles.title, { color: theme.text }]}>herdline</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Herdline</Text>
         <Text style={{ color: theme.muted }}>輸入電腦端產生的金鑰</Text>
       </View>
       {!FIXED_URL && (
