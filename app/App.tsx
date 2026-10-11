@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Contact, Server } from './src/api';
 import { ChatScreen } from './src/screens/ChatScreen';
@@ -50,10 +51,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        {content}
-        <StatusBar style="auto" />
-      </SafeAreaView>
+      <KeyboardProvider>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+          {content}
+          <StatusBar style="auto" />
+        </SafeAreaView>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }
