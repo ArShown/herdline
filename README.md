@@ -13,9 +13,21 @@ python3 -m herdline_bridge token      # run inside bridge/; prints the phone tok
 HERDLINE_PYTHON=$(command -v python3.11) pm2 start ecosystem.config.cjs && pm2 save
 ```
 
-Keep it bound to `127.0.0.1` and expose it to your tailnet with HTTPS: `tailscale serve --bg 8787`. The app then connects to `https://<mac>.<tailnet>.ts.net`.
+Keep it bound to `127.0.0.1` and expose it to your tailnet with HTTPS: `tailscale serve --bg 8787`. The app then connects to `https://<mac>.<tailnet>.ts.net`. The first run asks you to enable Serve for the tailnet, and Tailscale then fetches a certificate from Let's Encrypt; a VPN that captures all traffic blocks that, so disconnect it until the first request succeeds.
 
-Endpoints (all need `Authorization: Bearer <token>`): `GET /api/contacts`, `GET|POST /api/contacts/<id>/messages`, `GET /api/contacts/<id>/screen`, `POST /api/contacts/<id>/keys`.
+Run the `token` command in a plain terminal, not through an agent session, so the token does not end up in a transcript.
+
+Endpoints (all need `Authorization: Bearer <token>`):
+
+- `GET /api/contacts` – spaces, usage line, and `away` when `away_flag` exists
+- `POST /api/spaces` – open a new space
+- `GET /api/contacts/<id>/messages?limit=50[&before=<message id>]` – latest messages, or the page before a message
+- `POST /api/contacts/<id>/messages` – send text, images and files
+- `GET /api/contacts/<id>/screen`, `POST /api/contacts/<id>/keys` – see the terminal and answer a dialog
+- `POST /api/contacts/<id>/exit` – end the session and delete its uploads
+- `GET /api/images/<id>` – an image listed in a message
+
+Only user turns typed by a person are shown as yours; messages from other sessions and task notices are left out.
 
 ### Context usage
 
@@ -52,3 +64,20 @@ To fix the bridge address in the build, put it in `app/.env.local` (not committe
 ```sh
 EXPO_PUBLIC_HERDLINE_URL=https://<mac>.<tailnet>.ts.net
 ```
+
+The app is on Expo SDK 56 so it builds with Xcode 26; SDK 57 needs Xcode 27.
+
+### Install on an iPhone
+
+No Expo Go: build a release app with Xcode and install it over USB. A free Apple ID works; sign in once under Xcode → Settings → Accounts.
+
+```sh
+cd app
+npm run prebuild:ios -- --clean        # only after adding a native module
+xcodebuild -workspace ios/Herdline.xcworkspace -scheme Herdline -configuration Release \
+  -destination 'id=<iPhone UDID>' -derivedDataPath ios/build \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=<team id> CODE_SIGN_STYLE=Automatic build
+xcrun devicectl device install app --device <device id> ios/build/Build/Products/Release-iphoneos/Herdline.app
+```
+
+`xcrun devicectl list devices` shows the device id, and `xcrun devicectl device info details --device <device id>` shows the UDID. On the phone, trust the developer once under Settings → General → VPN & Device Management.

@@ -1,6 +1,6 @@
 # Copy to ~/.config/herdline/config.toml
 
-# Listen on the Tailscale address only (`tailscale ip -4`), never 0.0.0.0.
+# Keep it on localhost and reach it through `tailscale serve`; never 0.0.0.0.
 host = "127.0.0.1"
 port = 8787
 
@@ -15,6 +15,9 @@ state_dir = "~/.local/state/herdline"
 
 # Folder every space opened from the phone starts in; leave unset to disable opening spaces.
 # space_cwd = "~/projects"
+
+# A file that exists while you are away from the computer; the phone shows a moon while it does.
+# away_flag = "~/.claude/state/away"
 
 # A new space uses the account with the lowest weekly usage, read from these files
 # (JSON with seven_day.used_percentage, e.g. saved by your status line script).
