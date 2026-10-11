@@ -29,6 +29,13 @@ def find(config_dirs: list[Path], session_id: str) -> Path | None:
     return None
 
 
+def forget(session_id: str) -> None:
+    """Drop cached data for a session that has ended."""
+    path = _paths.pop(session_id, None)
+    if path:
+        _cache.pop(path, None)
+
+
 def _text_of(content) -> str:
     if isinstance(content, str):
         return content

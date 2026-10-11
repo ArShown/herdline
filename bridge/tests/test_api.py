@@ -271,7 +271,7 @@ class ApiTest(unittest.TestCase):
         pane, text = self.herdr.prompts[0]
         saved = Path(text.split('[image: ')[1].rstrip(']'))
         self.assertEqual((pane, text.splitlines()[0], saved.read_bytes()), ('w2:p1', 'see', b'photo'))
-        self.assertEqual(saved.parent, self.config.state_dir / 'uploads')
+        self.assertEqual(saved.parent, self.config.state_dir / 'uploads' / 's-web')
         bad = {'type': 'image/jpeg', 'data': 'not base64!'}
         self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'images': [bad]})[0], 400)
         exe = {'type': 'application/x-sh', 'data': base64.b64encode(b'x').decode()}
@@ -286,7 +286,7 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 202)
         text = self.herdr.prompts[0][1]
         saved = Path(text.split('[file: ')[1].rstrip(']'))
-        self.assertEqual((saved.parent, saved.read_bytes()), (self.config.state_dir / 'uploads', b'%PDF'))
+        self.assertEqual((saved.parent, saved.read_bytes()), (self.config.state_dir / 'uploads' / 's-web', b'%PDF'))
         self.assertTrue(saved.name.endswith('-報價_v2.pdf'))
         self.write_transcript('s-web', [entry('user', text, 'u-01')])
         _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
@@ -337,6 +337,27 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.api.handle('POST', '/api/contacts/w1/exit', {}, {})[1], {'error': 'busy'})
         self.assertEqual(self.herdr.closed, [])
         self.assertEqual(self.api.handle('POST', '/api/contacts/w1/exit', {}, {'force': True})[0], 200)
+
+
+    def test_exit_removes_that_conversations_uploads(self):
+        import herdline_bridge.api as api_mod
+        api_mod.EXIT_WAIT_STEPS = 1
+        api_mod.EXIT_WAIT_SECONDS = 0
+        photo = {'type': 'image/png', 'data': base64.b64encode(b'png').decode()}
+        self.api.handle('POST', '/api/contacts/w2/messages', {}, {'images': [photo]})
+        record_handoff(self.config, 's-old', 's-new')
+        self.herdr._agents[1]['agent_status'] = 'idle'
+        self.api.handle('POST', '/api/contacts/w1/messages', {}, {'images': [photo]})
+        saved = Path(self.herdr.prompts[0][1].split('[image: ')[1].rstrip(']'))
+        self.write_transcript('s-web', [entry('user', f'[image: {saved}]', 'u-01')])
+        _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
+        image_url = body['messages'][0]['images'][0]
+        self.assertEqual(self.api.handle('GET', image_url, {}, None)[0], 200)
+        self.api.handle('POST', '/api/contacts/w2/exit', {}, {})
+        uploads = self.config.state_dir / 'uploads'
+        self.assertFalse((uploads / 's-web').exists())
+        self.assertTrue((uploads / 's-new').exists())  # another conversation keeps its files
+        self.assertEqual(self.api.handle('GET', image_url, {}, None)[0], 404)
 
 
 if __name__ == '__main__':
