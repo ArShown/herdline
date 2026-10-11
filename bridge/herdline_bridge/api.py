@@ -62,7 +62,8 @@ class Api:
         if parts[:2] != ['api', 'contacts']:
             return 404, {'error': 'not_found'}
         if len(parts) == 2 and method == 'GET':
-            return 200, {'contacts': self.list_contacts(), 'usage': self.usage()}
+            away = bool(self.config.away_flag and self.config.away_flag.exists())
+            return 200, {'contacts': self.list_contacts(), 'usage': self.usage(), 'away': away}
         if len(parts) != 4:
             return 404, {'error': 'not_found'}
         contact = self._find(parts[2])

@@ -25,6 +25,8 @@ class Config:
     aliases: dict[str, str] = field(default_factory=dict)
     # Folder every space opened from the phone starts in; unset disables opening spaces.
     space_cwd: Path | None = None
+    # A file that exists while you are away from the computer; the phone shows a moon while it does.
+    away_flag: Path | None = None
     # Account name -> JSON with seven_day.used_percentage; a new space uses the account with most left.
     usage_files: dict[str, Path] = field(default_factory=dict)
     # Command whose one-line output is shown above the list (e.g. the one in herdr's tab_bar_right).
@@ -71,6 +73,8 @@ def load(path: Path = DEFAULT_PATH) -> Config:
         config.config_dirs = [Path(p).expanduser() for p in raw['config_dirs']]
     if 'space_cwd' in raw:
         config.space_cwd = Path(raw['space_cwd']).expanduser()
+    if 'away_flag' in raw:
+        config.away_flag = Path(raw['away_flag']).expanduser()
     config.usage_files = {k: Path(v).expanduser() for k, v in raw.get('usage_files', {}).items()}
     config.usage_command = raw.get('usage_command')
     if 'claude_args' in raw:

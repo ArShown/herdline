@@ -352,7 +352,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             ))}
             {picked.map((image, i) => (
               <View key={`${i}-${image.uri.slice(-24)}`}>
-                <Pressable onPress={() => setViewing({ kind: 'local', uri: image.uri })}>
+                <Pressable onPress={() => setViewing({ kind: 'local', uri: image.uri, index: i })}>
                   <Image source={{ uri: image.uri }} style={styles.pickedThumb} />
                 </Pressable>
                 <Pressable
@@ -442,7 +442,13 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         server={server}
         source={viewing}
         onClose={() => setViewing(null)}
-        onAttach={(image) => setPicked((current) => [...current, image].slice(0, MAX_ATTACHMENTS - files.length))}
+        onAttach={(image, index) =>
+          setPicked((current) =>
+            index != null
+              ? current.map((p, i) => (i === index ? image : p))
+              : [...current, image].slice(0, MAX_ATTACHMENTS - files.length),
+          )
+        }
       />
     </KeyboardAvoidingView>
   );

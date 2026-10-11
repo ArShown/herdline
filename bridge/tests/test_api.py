@@ -116,6 +116,14 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([c['name'] for c in body['contacts']], ['API', 'proj_web'])
 
+    def test_away_flag_follows_the_file(self):
+        _, body = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertFalse(body['away'])
+        self.config.away_flag = Path(self.tmp.name) / 'away'
+        self.config.away_flag.touch()
+        _, body = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertTrue(body['away'])
+
     def test_most_recent_session_is_on_duty(self):
         self.write_transcript('s-old', [entry('user', 'hi', 'u-01')], age=0)
         self.write_transcript('s-new', [entry('user', 'hi', 'u-02')], age=60)

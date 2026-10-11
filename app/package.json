@@ -9,6 +9,7 @@
     "expo-clipboard": "~56.0.4",
     "expo-document-picker": "~56.0.4",
     "expo-font": "~56.0.7",
+    "expo-image-manipulator": "~56.0.26",
     "expo-image-picker": "~56.0.25",
     "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",
