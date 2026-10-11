@@ -55,7 +55,8 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
         placeholderTextColor={theme.muted}
         autoCapitalize="none"
         autoCorrect={false}
-        secureTextEntry
+        autoComplete="off"
+        spellCheck={false}
         value={token}
         onChangeText={setToken}
       />
