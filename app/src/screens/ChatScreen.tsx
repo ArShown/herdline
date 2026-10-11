@@ -209,6 +209,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         contentContainerStyle={styles.listContent}
         data={[...messages].reverse()}
         inverted
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           status === 'working' || sending ? <ThinkingDots color={theme.muted} label={sending ? '傳送中' : '思考中'} /> : null
         }

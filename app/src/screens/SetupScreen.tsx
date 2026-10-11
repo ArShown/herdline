@@ -1,5 +1,18 @@
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { api, ApiError, type Server } from '../api';
 import { saveServer } from '../settings';
 import { useTheme } from '../theme';
@@ -29,46 +42,63 @@ export function SetupScreen({ onDone }: { onDone: (server: Server) => void }) {
     }
   };
 
+  const paste = async () => {
+    setToken((await Clipboard.getStringAsync()).trim());
+    setError(null);
+  };
+
   const input = [styles.input, { backgroundColor: theme.surface, color: theme.text }];
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.bg }]}>
-      <View style={styles.brand}>
-        <Image source={require('../../assets/logo.png')} style={styles.logo} />
-        <Text style={[styles.title, { color: theme.text }]}>Herdline</Text>
-        <Text style={{ color: theme.muted }}>輸入電腦端產生的金鑰</Text>
-      </View>
-      {!FIXED_URL && (
-        <TextInput
-          style={input}
-          placeholder="https://your-mac.tailnet.ts.net"
-          placeholderTextColor={theme.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          value={url}
-          onChangeText={setUrl}
-        />
-      )}
-      <TextInput
-        style={input}
-        placeholder="金鑰"
-        placeholderTextColor={theme.muted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="off"
-        spellCheck={false}
-        value={token}
-        onChangeText={setToken}
-      />
-      {error && <Text style={{ color: theme.danger }}>{error}</Text>}
-      <Pressable
-        style={[styles.button, { backgroundColor: theme.accent, opacity: url && token && !busy ? 1 : 0.5 }]}
-        disabled={!url || !token || busy}
-        onPress={connect}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[styles.wrap, { backgroundColor: theme.bg }]}
       >
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>連線</Text>}
-      </Pressable>
-    </View>
+        <View style={styles.brand}>
+          <Image source={require('../../assets/logo.png')} style={styles.logo} />
+          <Text style={[styles.title, { color: theme.text }]}>Herdline</Text>
+          <Text style={{ color: theme.muted }}>輸入電腦端產生的金鑰</Text>
+        </View>
+        {!FIXED_URL && (
+          <TextInput
+            style={input}
+            placeholder="https://your-mac.tailnet.ts.net"
+            placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={url}
+            onChangeText={setUrl}
+          />
+        )}
+        <View style={styles.tokenRow}>
+          <TextInput
+            style={[input, styles.tokenInput]}
+            placeholder="金鑰"
+            placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            spellCheck={false}
+            value={token}
+            onChangeText={setToken}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+          <Pressable onPress={paste} style={[styles.paste, { backgroundColor: theme.surface }]}>
+            <Text style={{ color: theme.accent, fontWeight: '600' }}>貼上</Text>
+          </Pressable>
+        </View>
+        {error && <Text style={{ color: theme.danger }}>{error}</Text>}
+        <Pressable
+          style={[styles.button, { backgroundColor: theme.accent, opacity: url && token && !busy ? 1 : 0.5 }]}
+          disabled={!url || !token || busy}
+          onPress={connect}
+        >
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>連線</Text>}
+        </Pressable>
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -78,6 +108,9 @@ const styles = StyleSheet.create({
   logo: { width: 88, height: 88, borderRadius: 22, marginBottom: 6 },
   title: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
   input: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
+  tokenRow: { flexDirection: 'row', gap: 8 },
+  tokenInput: { flex: 1 },
+  paste: { borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center' },
   button: { borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
