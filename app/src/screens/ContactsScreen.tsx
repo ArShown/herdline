@@ -24,6 +24,7 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
   const theme = useTheme();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [usage, setUsage] = useState<string | null>(null);
+  const [away, setAway] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -34,6 +35,7 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
       const data = await api.contacts(server);
       setContacts(data.contacts);
       setUsage(data.usage);
+      setAway(!!data.away);
       setError(null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) onLogout();
@@ -59,7 +61,14 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
   const titleBar = (
     <View style={styles.top}>
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
+          {away && (
+            <View style={[styles.away, { backgroundColor: theme.surface }]}>
+              <Text style={[styles.awayText, { color: theme.muted }]}>🌙 夜哨</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.actions}>
           <Pressable onPress={() => setSettings(true)} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
             <Ionicons name="settings-outline" size={18} color={theme.text} />
@@ -173,6 +182,9 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   content: { paddingHorizontal: 14, paddingBottom: 24, gap: 10 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  away: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  awayText: { fontSize: 13, fontWeight: '600' },
   headerTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

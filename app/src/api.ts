@@ -49,7 +49,7 @@ export const imageUrl = (s: Server, path: string) => `${s.url.replace(/\/+$/, ''
 const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id)}`;
 
 export const api = {
-  contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null }>(s, 'GET', '/api/contacts'),
+  contacts: (s: Server) => call<{ contacts: Contact[]; usage: string | null; away?: boolean }>(s, 'GET', '/api/contacts'),
   messages: (s: Server, id: string, before?: string, limit = 50) =>
     call<{ status: Status; session_id: string; account: string | null; messages: Message[]; has_more: boolean }>(
       s,
