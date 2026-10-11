@@ -29,6 +29,15 @@ Endpoints (all need `Authorization: Bearer <token>`):
 
 Only user turns typed by a person are shown as yours; messages from other sessions and task notices are left out.
 
+### Spaces opened from the phone
+
+A space opened from the phone starts Claude Code with `HERDLINE=1`. To set something up only for those sessions without sending a first message (the space takes its name from your first message), add a `SessionStart` hook that checks it:
+
+```sh
+[ "$HERDLINE" = "1" ] || exit 0
+echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}'
+```
+
 ### Context usage
 
 The bridge shows how full each session's context is. Make your Claude Code status line script write it:

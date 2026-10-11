@@ -282,7 +282,8 @@ class Api:
             number += 1
         name = f'Space {number}'
         account = self._pick_account()
-        env = {}
+        # Lets a SessionStart hook tell spaces opened from the phone apart.
+        env = {'HERDLINE': '1'}
         config_dir = self.config.accounts.get(account) if account else None
         if config_dir and config_dir != Path.home() / '.claude':
             env['CLAUDE_CONFIG_DIR'] = str(config_dir)

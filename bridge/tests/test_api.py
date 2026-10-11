@@ -223,6 +223,7 @@ class ApiTest(unittest.TestCase):
         status, body = self.api.handle('POST', '/api/spaces', {}, None)
         self.assertEqual((status, body['id'], body['name']), (201, 'w9', 'Space 2'))
         self.assertEqual(self.herdr.created[0][:2], (self.tmp.name, 'Space 2'))
+        self.assertEqual(self.herdr.created[0][2]['HERDLINE'], '1')
         name, pane, args = self.herdr.started[0]
         self.assertTrue(name.startswith('space-2-'))
         self.assertEqual((pane, args), ('w9:p1', ['--permission-mode', 'auto']))
@@ -238,7 +239,7 @@ class ApiTest(unittest.TestCase):
         self.config.usage_files = {'claude': usage / 'a.json', 'claude-b': usage / 'b.json'}
         status, body = self.api.handle('POST', '/api/spaces', {}, None)
         self.assertEqual((status, body['account']), (201, 'claude-b'))
-        self.assertEqual(self.herdr.created[0][2], {'CLAUDE_CONFIG_DIR': str(other)})
+        self.assertEqual(self.herdr.created[0][2], {'HERDLINE': '1', 'CLAUDE_CONFIG_DIR': str(other)})
 
     def test_create_space_falls_back_to_first_account_and_needs_cwd(self):
         self.assertEqual(self.api.handle('POST', '/api/spaces', {}, None)[0], 400)
