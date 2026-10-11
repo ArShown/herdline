@@ -3,6 +3,7 @@
   python -m herdline_bridge token                 create a new phone token (printed once)
   python -m herdline_bridge contacts              list contacts as JSON
   python -m herdline_bridge handoff <old> <new>   record that <new> session took over <old>
+  python -m herdline_bridge keep-sent             PostToolUse hook: keep copies of images sent to you
 """
 import hashlib
 import json
@@ -13,11 +14,22 @@ if sys.version_info < (3, 11):
     sys.exit('herdline bridge needs Python 3.11+')
 
 from . import config as config_mod
+from . import sent
 from .api import Api
 from .contacts import record_handoff
 
 
+def keep_sent() -> None:
+    # Runs in every session; a failure here must never show up as a hook error.
+    try:
+        sent.keep(config_mod.load().state_dir, json.load(sys.stdin))
+    except Exception:
+        pass
+
+
 def main(argv: list[str]) -> None:
+    if argv[:1] == ['keep-sent']:
+        return keep_sent()
     config = config_mod.load()
     cmd = argv[0] if argv else ''
     if cmd == 'serve':

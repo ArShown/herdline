@@ -29,6 +29,7 @@ state_dir = "~/.local/state/herdline"
 # usage_command = "~/bin/ai-usage"
 
 # Arguments for `claude` in a space opened from the phone.
+# Add "--remote-control" so the session has the SendUserFile tool and can send you images.
 # claude_args = ["--permission-mode", "auto"]
 
 # Config directory name = account label shown on the phone

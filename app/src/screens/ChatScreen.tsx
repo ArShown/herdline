@@ -13,7 +13,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
+  type ImageLoadEventData,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
 import { AttachSheet } from '../AttachSheet';
@@ -33,6 +36,14 @@ const DIALOG_KEYS: { key: string; icon?: 'arrow-up' | 'arrow-down'; label?: stri
   { key: 'esc', label: 'Esc' },
 ];
 const MAX_ATTACHMENTS = 6;
+const MAX_IMAGE_HEIGHT = 480;
+
+/** Size for an image shown on its own row: as wide as allowed, keeping its shape, never too tall. */
+function fit(ratio: number | undefined, maxWidth: number) {
+  const r = ratio ?? 4 / 3;
+  const width = Math.min(maxWidth, MAX_IMAGE_HEIGHT * r);
+  return { width, height: width / r };
+}
 
 type Props = { server: Server; contact: Contact; onBack: () => void };
 
@@ -69,6 +80,13 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [screen, setScreen] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageSource | null>(null);
+  const [ratios, setRatios] = useState<Record<string, number>>({});
+  const { width: screenWidth } = useWindowDimensions();
+  const contentWidth = screenWidth - 32;
+  const measure = (key: string) => (e: NativeSyntheticEvent<ImageLoadEventData>) => {
+    const { width, height } = e.nativeEvent.source ?? {};
+    if (width && height && ratios[key] !== width / height) setRatios((r) => ({ ...r, [key]: width / height }));
+  };
   const [menu, setMenu] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -202,7 +220,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       <View style={[styles.images, mine && styles.imagesMine]}>
         {images.map((path) => (
           <Pressable key={path} onPress={() => setViewing({ kind: 'remote', path })}>
-            <AuthImage server={server} path={path} style={[styles.thumb, { backgroundColor: theme.surface }]} />
+            <AuthImage
+              server={server}
+              path={path}
+              onLoad={measure(path)}
+              style={[styles.photo, fit(ratios[path], mine ? contentWidth * 0.75 : contentWidth), { backgroundColor: theme.surface }]}
+            />
           </Pressable>
         ))}
       </View>
@@ -297,7 +320,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
               {pending.images.length > 0 && (
                 <View style={[styles.images, styles.imagesMine]}>
                   {pending.images.map((uri) => (
-                    <Image key={uri} source={{ uri }} style={[styles.thumb, { backgroundColor: theme.surface }]} />
+                    <Image
+                      key={uri}
+                      source={{ uri }}
+                      onLoad={measure(uri)}
+                      style={[styles.photo, fit(ratios[uri], contentWidth * 0.75), { backgroundColor: theme.surface }]}
+                    />
                   ))}
                 </View>
               )}
@@ -486,9 +514,9 @@ const styles = StyleSheet.create({
   userBubble: { maxWidth: '85%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
   userText: { fontSize: 16, lineHeight: 23 },
   assistantRow: { gap: 8, marginVertical: 10 },
-  images: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  imagesMine: { justifyContent: 'flex-end' },
-  thumb: { width: 150, height: 150, borderRadius: 12 },
+  images: { gap: 8 },
+  imagesMine: { alignItems: 'flex-end' },
+  photo: { borderRadius: 12 },
   error: { textAlign: 'center', padding: 6 },
   composer: {
     marginHorizontal: 10,

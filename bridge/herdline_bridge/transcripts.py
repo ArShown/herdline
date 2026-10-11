@@ -50,6 +50,11 @@ def _text_of(content) -> str:
     return '\n'.join(parts)
 
 
+def sent_name(tool_use_id: str, index: int, path: str) -> str:
+    """File name of the copy kept for one image of a SendUserFile call."""
+    return f'{tool_use_id}-{index}{Path(path).suffix.lower()}'
+
+
 def _images_of(content) -> list[dict]:
     """Images in a message: pasted ones (base64) and files sent with the SendUserFile tool."""
     images = []
@@ -60,9 +65,13 @@ def _images_of(content) -> list[dict]:
         if part.get('type') == 'image' and source.get('type') == 'base64':
             images.append({'kind': 'base64', 'media_type': source.get('media_type'), 'data': source.get('data')})
         elif part.get('type') == 'tool_use' and part.get('name') == 'SendUserFile':
-            for path in (part.get('input') or {}).get('files') or []:
+            for index, path in enumerate((part.get('input') or {}).get('files') or []):
                 if Path(path).suffix.lower() in IMAGE_TYPES:
-                    images.append({'kind': 'file', 'path': path})
+                    image = {'kind': 'file', 'path': path}
+                    if part.get('id'):
+                        # Name of the copy the keep-sent hook made, in case the file is gone.
+                        image['sent'] = sent_name(part['id'], index, path)
+                    images.append(image)
     return images
 
 

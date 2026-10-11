@@ -6,6 +6,7 @@ import type { Contact, Server } from './src/api';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { ContactsScreen } from './src/screens/ContactsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
+import { SwipeBack } from './src/SwipeBack';
 import { clearServer, loadServer } from './src/settings';
 import { useTheme } from './src/theme';
 
@@ -33,10 +34,18 @@ export default function App() {
     );
   } else if (server === null) {
     content = <SetupScreen onDone={setServer} />;
-  } else if (open) {
-    content = <ChatScreen server={server} contact={open} onBack={() => setOpen(null)} />;
   } else {
-    content = <ContactsScreen server={server} onOpen={setOpen} onLogout={logout} onServerChange={setServer} />;
+    // The chat sits on top of the list, so swiping it away shows the list underneath.
+    content = (
+      <View style={{ flex: 1 }}>
+        <ContactsScreen server={server} onOpen={setOpen} onLogout={logout} onServerChange={setServer} />
+        {open && (
+          <SwipeBack onBack={() => setOpen(null)}>
+            <ChatScreen server={server} contact={open} onBack={() => setOpen(null)} />
+          </SwipeBack>
+        )}
+      </View>
+    );
   }
 
   return (

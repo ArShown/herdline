@@ -38,6 +38,16 @@ A space opened from the phone starts Claude Code with `HERDLINE=1`. To set somet
 echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}'
 ```
 
+### Images Claude sends
+
+Images sent with `SendUserFile` are read from their path when the phone asks for them. If the session deletes the file soon after (a scratch folder, say), keep a copy at send time with a `PostToolUse` hook on `SendUserFile`:
+
+```sh
+PYTHONPATH=/path/to/herdline/bridge python3.11 -m herdline_bridge keep-sent
+```
+
+Copies go to `<state_dir>/sent/<session>/` and are removed when you end the conversation from the phone.
+
 ### Context usage
 
 The bridge shows how full each session's context is. Make your Claude Code status line script write it:

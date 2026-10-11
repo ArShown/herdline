@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from . import contacts as contacts_mod
+from . import sent as sent_mod
 from . import transcripts
 from .config import Config
 from .herdr import Herdr, HerdrError
@@ -150,7 +151,7 @@ class Api:
         return out
 
     def _register(self, image: dict, session_id: str | None = None) -> str:
-        key = image.get('path') or image.get('data', '')
+        key = image.get('sent') or image.get('path') or image.get('data', '')
         image_id = hashlib.sha256(key.encode()).hexdigest()[:24]
         self._images.pop(image_id, None)
         self._images[image_id] = {**image, 'session': session_id}
@@ -168,6 +169,10 @@ class Api:
             except (ValueError, TypeError):
                 return 404, {'error': 'not_found'}
         path = Path(image['path'])
+        kept = sent_mod.folder(self.config.state_dir, image['session']) / image['sent'] \
+            if image.get('sent') and image.get('session') else None
+        if kept and kept.is_file():
+            path = kept
         content_type = transcripts.IMAGE_TYPES.get(path.suffix.lower())
         if content_type is None or not path.is_file():
             return 404, {'error': 'not_found'}
@@ -254,6 +259,7 @@ class Api:
         """Drop what the bridge kept for an ended conversation: uploaded files and cached data."""
         uploads = self._uploads(session_id)
         shutil.rmtree(uploads, ignore_errors=True)
+        shutil.rmtree(sent_mod.folder(self.config.state_dir, session_id), ignore_errors=True)
         for image_id, image in list(self._images.items()):
             if image.get('session') == session_id or str(image.get('path', '')).startswith(str(uploads)):
                 del self._images[image_id]

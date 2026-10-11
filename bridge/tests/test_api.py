@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from herdline_bridge import transcripts
+from herdline_bridge import sent, transcripts
 from herdline_bridge.api import Api, Binary
 from herdline_bridge.config import Config
 from herdline_bridge.contacts import record_handoff
@@ -294,6 +294,29 @@ class ApiTest(unittest.TestCase):
         second = self.api.handle('GET', body['messages'][1]['images'][0], {}, None)[1]
         self.assertEqual((second.data, second.content_type), (b'png-bytes', 'image/png'))
         self.assertEqual(self.api.handle('GET', '/api/images/unknown', {}, None)[0], 404)
+
+    def test_sent_image_still_shows_after_the_file_is_deleted(self):
+        shot = Path(self.tmp.name) / 'grid.jpg'
+        shot.write_bytes(b'first')
+        hook = {'tool_name': 'SendUserFile', 'session_id': 's-new', 'tool_use_id': 'toolu_1',
+                'tool_input': {'files': [str(shot)]}}
+        sent.keep(self.config.state_dir, hook)
+        sent.keep(self.config.state_dir, {**hook, 'tool_name': 'Read', 'tool_use_id': 'toolu_x'})
+        sent.keep(self.config.state_dir, {**hook, 'session_id': '../escape', 'tool_use_id': 'toolu_y'})
+        self.assertEqual([p.name for p in (self.config.state_dir / 'sent').rglob('*.jpg')], ['toolu_1-0.jpg'])
+        # The same path is reused for a later picture, then deleted.
+        shot.write_bytes(b'second')
+        sent.keep(self.config.state_dir, {**hook, 'tool_use_id': 'toolu_2'})
+        shot.unlink()
+        record_handoff(self.config, 's-old', 's-new')
+        send = lambda uuid, tool_id: entry('assistant', [{'type': 'tool_use', 'id': tool_id, 'name': 'SendUserFile',
+                                                         'input': {'files': [str(shot)], 'caption': uuid}}], uuid)
+        self.write_transcript('s-new', [send('a-01', 'toolu_1'), send('a-02', 'toolu_2')])
+        _, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
+        got = [self.api.handle('GET', m['images'][0], {}, None)[1].data for m in body['messages']]
+        self.assertEqual(got, [b'first', b'second'])
+        self.api._clean_up('s-new')
+        self.assertFalse((self.config.state_dir / 'sent' / 's-new').exists())
 
     def test_preview_of_image_only_message(self):
         record_handoff(self.config, 's-old', 's-new')

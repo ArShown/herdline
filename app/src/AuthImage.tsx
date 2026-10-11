@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Image, Platform, type ImageStyle, type StyleProp } from 'react-native';
+import { Image, Platform, type ImageLoadEventData, type ImageStyle, type NativeSyntheticEvent, type StyleProp } from 'react-native';
 import { imageUrl, type Server } from './api';
 
 /** An image from the bridge, fetched with the token. */
-export function AuthImage({ server, path, style }: { server: Server; path: string; style: StyleProp<ImageStyle> }) {
+type Props = {
+  server: Server;
+  path: string;
+  style: StyleProp<ImageStyle>;
+  onLoad?: (e: NativeSyntheticEvent<ImageLoadEventData>) => void;
+};
+
+export function AuthImage({ server, path, style, onLoad }: Props) {
   const uri = imageUrl(server, path);
   const headers = { Authorization: `Bearer ${server.token}` };
   // The web preview cannot send headers with <img>, so fetch the bytes first.
@@ -23,6 +30,6 @@ export function AuthImage({ server, path, style }: { server: Server; path: strin
     };
   }, [uri]);
 
-  if (Platform.OS === 'web') return webUri ? <Image source={{ uri: webUri }} style={style} /> : null;
-  return <Image source={{ uri, headers }} style={style} />;
+  if (Platform.OS === 'web') return webUri ? <Image source={{ uri: webUri }} style={style} onLoad={onLoad} /> : null;
+  return <Image source={{ uri, headers }} style={style} onLoad={onLoad} />;
 }
