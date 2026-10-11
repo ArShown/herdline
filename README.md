@@ -23,6 +23,7 @@ Endpoints (all need `Authorization: Bearer <token>`):
 - `POST /api/spaces` – open a new space
 - `GET /api/contacts/<id>/messages?limit=50[&before=<message id>]` – latest messages, or the page before a message
 - `POST /api/contacts/<id>/messages` – send text, images and files
+- `GET /api/contacts/<id>/agents` – agents the conversation dispatched: its subagents active in the last three hours (nested under the agent that started them) and non-Claude agents, such as codex, running in the same workspace
 - `POST /api/contacts/<id>/run` – run one shell command in the session, as `!` does at the computer (one line, only while the session is idle; a message starting with `!` takes the same path). Its output shows in the messages
 - `GET /api/contacts/<id>/screen`, `POST /api/contacts/<id>/keys` – see the terminal and answer a dialog
 - `POST /api/contacts/<id>/exit` – end the session and delete its uploads

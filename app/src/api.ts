@@ -12,6 +12,22 @@ export type Message = {
   output?: string;
 };
 
+export type AgentState = 'blocked' | 'working' | 'quiet' | 'done';
+
+/** An agent a conversation sent off; `depth` > 0 means another listed agent dispatched it. */
+export type DispatchedAgent = {
+  id: string;
+  kind: string;
+  name: string;
+  type: string | null;
+  description: string | null;
+  state: AgentState;
+  started: string | null;
+  active: string | null;
+  summary: string;
+  depth: number;
+};
+
 export type OutgoingImage = { type: string; data: string };
 export type OutgoingFile = { name: string; data: string };
 
@@ -61,6 +77,8 @@ export const api = {
     ),
   send: (s: Server, id: string, text: string, images: OutgoingImage[] = [], files: OutgoingFile[] = []) =>
     call(s, 'POST', `${contactPath(id)}/messages`, { text, images, files }),
+  agents: (s: Server, id: string) =>
+    call<{ agents: DispatchedAgent[] }>(s, 'GET', `${contactPath(id)}/agents`).then((d) => d.agents),
   run: (s: Server, id: string, command: string) => call(s, 'POST', `${contactPath(id)}/run`, { command }),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),
   keys: (s: Server, id: string, keys: string[]) => call(s, 'POST', `${contactPath(id)}/keys`, { keys }),

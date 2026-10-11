@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from urllib.parse import unquote
 
+from . import agents as agents_mod
 from . import contacts as contacts_mod
 from . import sent as sent_mod
 from . import transcripts
@@ -78,6 +79,9 @@ class Api:
         if route == ('POST', 'messages'):
             body = body or {}
             return self.send(contact, body.get('text', ''), body.get('images') or [], body.get('files') or [])
+        if route == ('GET', 'agents'):
+            path = contacts_mod.transcript(self.config, contact)
+            return 200, {'agents': agents_mod.overview(path, self.herdr.agents(), contact.workspace_id)}
         if route == ('POST', 'run'):
             return self.run(contact, (body or {}).get('command', ''))
         if route == ('GET', 'screen'):

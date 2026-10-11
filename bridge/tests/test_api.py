@@ -262,6 +262,35 @@ class ApiTest(unittest.TestCase):
         _, contacts = self.api.handle('GET', '/api/contacts', {}, None)
         self.assertEqual(contacts['contacts'][0]['preview']['text'], '! ls')
 
+    def write_subagent(self, session, agent_id, meta, lines, age=0.0):
+        folder = self.config.config_dirs[0] / 'projects/p' / session / 'subagents'
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f'agent-{agent_id}.jsonl'
+        path.write_text('\n'.join(lines) + '\n')
+        if meta is not None:
+            (folder / f'agent-{agent_id}.meta.json').write_text(json.dumps(meta))
+        stamp = time.time() - age
+        os.utime(path, (stamp, stamp))
+
+    def test_agents_overview_lists_what_the_session_dispatched(self):
+        record_handoff(self.config, 's-old', 's-new')
+        self.write_transcript('s-new', [entry('user', 'hi', 'u-01')])
+        ask = entry('user', 'do it', 'x-01')
+        tool = json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'name': 'Bash'}]}})
+        final = json.dumps({'type': 'assistant', 'message': {'stop_reason': 'end_turn',
+                                                               'content': [{'type': 'text', 'text': 'all done'}]}})
+        self.write_subagent('s-new', 'pm1', {'name': 'pm-1', 'agentType': 'pm', 'description': 'ticket'}, [ask, final])
+        self.write_subagent('s-new', 'sasd1', {'agentType': 'sasd', 'parentAgentId': 'pm1'}, [ask, tool], age=20 * 60)
+        self.write_subagent('s-new', 'qa1', {'name': 'qa', 'description': 'audit'}, [ask, tool])
+        self.write_subagent('s-new', 'gone', None, [ask, tool], age=4 * 60 * 60)
+        self.herdr._agents.append(agent('cx', 'w1', 'w1:p4', 'blocked', kind='codex') | {'name': 'impl'})
+        status, body = self.api.handle('GET', '/api/contacts/w1/agents', {}, None)
+        self.assertEqual(status, 200)
+        self.assertEqual([(a['name'], a['state'], a['depth']) for a in body['agents']], [
+            ('impl', 'blocked', 0), ('qa', 'working', 0), ('w1:p3', 'done', 0), ('pm-1', 'done', 0), ('sasd', 'done', 1)])
+        pm = next(a for a in body['agents'] if a['name'] == 'pm-1')
+        self.assertEqual((pm['description'], pm['summary']), ('ticket', 'all done'))
+
     def test_empty_text_and_unknown_contact(self):
         self.assertEqual(self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': ' '})[0], 400)
         self.assertEqual(self.api.handle('GET', '/api/contacts/nope/messages', {}, None)[0], 404)

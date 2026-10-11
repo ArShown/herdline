@@ -19,7 +19,17 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
+import { AgentsSheet, STATE_COLOR } from '../AgentsSheet';
+import {
+  api,
+  ApiError,
+  type Contact,
+  type DispatchedAgent,
+  type Message,
+  type OutgoingFile,
+  type Server,
+  type Status,
+} from '../api';
 import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
 import { loadDraft, saveDraft } from '../drafts';
@@ -108,8 +118,20 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [confirmRun, setConfirmRun] = useState<string | null>(null);
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const commandMode = draft.trimStart().startsWith('!');
+  const [agents, setAgents] = useState<DispatchedAgent[] | null>(null);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  const going = agents?.filter((a) => a.state === 'working' || a.state === 'blocked') ?? [];
   const room = MAX_ATTACHMENTS - picked.length - files.length;
-  useBlockSwipeBack(viewing != null || sheet || menu || confirmRun != null);
+  useBlockSwipeBack(viewing != null || sheet || menu || confirmRun != null || agentsOpen);
+
+  const loadAgents = useCallback(async () => {
+    try {
+      setAgents(await api.agents(server, contact.id));
+    } catch {
+      // The count stays as it was; the chat itself shows when the computer is unreachable.
+    }
+  }, [server, contact.id]);
+  usePolling(loadAgents, agentsOpen ? 4_000 : 15_000);
 
   const load = useCallback(async () => {
     try {
@@ -329,6 +351,19 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             </Text>
           </View>
         </View>
+        <Pressable onPress={() => setAgentsOpen(true)} hitSlop={10} style={styles.agentsButton}>
+          <Ionicons name="people-outline" size={22} color={theme.text} />
+          {going.length > 0 && (
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: STATE_COLOR[going.some((a) => a.state === 'blocked') ? 'blocked' : 'working'] },
+              ]}
+            >
+              <Text style={styles.badgeText}>{going.length}</Text>
+            </View>
+          )}
+        </Pressable>
         <Pressable onPress={() => setMenu(true)} hitSlop={12}>
           <Ionicons name="ellipsis-horizontal" size={22} color={theme.text} />
         </Pressable>
@@ -578,6 +613,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
           </View>
         </View>
       </Sheet>
+      <AgentsSheet visible={agentsOpen} onClose={() => setAgentsOpen(false)} agents={agents} theme={theme} />
       <AttachSheet
         visible={sheet}
         theme={theme}
@@ -688,6 +724,19 @@ const styles = StyleSheet.create({
   modeLabel: { fontSize: 12, paddingHorizontal: 4 },
   inputCommand: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 15 },
   runPreview: { borderRadius: 10, padding: 12 },
+  agentsButton: { marginRight: 4 },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   fileChip: { maxWidth: '85%', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
   pickedFile: { width: 120, height: 64, borderRadius: 10, padding: 8, justifyContent: 'center' },
 });
