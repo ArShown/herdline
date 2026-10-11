@@ -4,12 +4,14 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Tex
 import { api, ApiError, type Contact, type Server } from '../api';
 import { formatTime } from '../format';
 import { avatarColor, meterColor, statusColor, statusLabel, useTheme } from '../theme';
+import { SettingsSheet } from '../SettingsSheet';
 import { usePolling } from '../usePolling';
 
 type Props = {
   server: Server;
   onOpen: (contact: Contact) => void;
   onLogout: () => void;
+  onServerChange: (server: Server) => void;
 };
 
 /** "Claude A 6%" -> ["Claude A", "6%"]; text without a trailing value stays whole. */
@@ -18,13 +20,14 @@ function splitUsage(part: string): [string, string] {
   return match ? [match[1], match[2]] : [part.trim(), ''];
 }
 
-export function ContactsScreen({ server, onOpen, onLogout }: Props) {
+export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Props) {
   const theme = useTheme();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [usage, setUsage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [settings, setSettings] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -52,19 +55,23 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
     }
   };
 
+  // Stays put while the cards scroll under it.
+  const titleBar = (
+    <View style={[styles.header, { backgroundColor: theme.bg }]}>
+      <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
+      <View style={styles.actions}>
+        <Pressable onPress={() => setSettings(true)} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
+          <Ionicons name="settings-outline" size={18} color={theme.text} />
+        </Pressable>
+        <Pressable onPress={createSpace} disabled={creating} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.accent }]}>
+          {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={22} color="#fff" />}
+        </Pressable>
+      </View>
+    </View>
+  );
+
   const header = (
     <View>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
-        <View style={styles.actions}>
-          <Pressable onPress={onLogout} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
-            <Ionicons name="settings-outline" size={18} color={theme.text} />
-          </Pressable>
-          <Pressable onPress={createSpace} disabled={creating} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.accent }]}>
-            {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={22} color="#fff" />}
-          </Pressable>
-        </View>
-      </View>
       {usage && (
         <View style={styles.usage}>
           {usage.split('│').map((part) => {
@@ -85,76 +92,88 @@ export function ContactsScreen({ server, onOpen, onLogout }: Props) {
   );
 
   return (
-    <FlatList
-      style={{ backgroundColor: theme.bg }}
-      contentContainerStyle={styles.content}
-      data={contacts}
-      keyExtractor={(c) => c.id}
-      ListHeaderComponent={header}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await load();
-            setRefreshing(false);
-          }}
-        />
-      }
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Ionicons name="chatbubbles-outline" size={36} color={theme.muted} />
-          <Text style={{ color: theme.muted }}>沒有在跑的對話，按右上角開一個</Text>
-        </View>
-      }
-      renderItem={({ item }) => {
-        const ctx = item.context_used;
-        return (
-          <Pressable
-            style={({ pressed }) => [styles.card, { backgroundColor: pressed ? theme.surface : theme.card, borderColor: theme.border }]}
-            onPress={() => onOpen(item)}
-          >
-            <View style={[styles.avatar, { backgroundColor: avatarColor(item.name) }]}>
-              <Text style={styles.avatarText}>{item.name.slice(0, 1).toUpperCase()}</Text>
-            </View>
-            <View style={styles.body}>
-              <View style={styles.line}>
-                <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.time, { color: theme.muted }]}>{formatTime(item.preview?.ts)}</Text>
+    <View style={[styles.screen, { backgroundColor: theme.bg }]}>
+      {titleBar}
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.content}
+        data={contacts}
+        keyExtractor={(c) => c.id}
+        ListHeaderComponent={header}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await load();
+              setRefreshing(false);
+            }}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Ionicons name="chatbubbles-outline" size={36} color={theme.muted} />
+            <Text style={{ color: theme.muted }}>沒有在跑的對話，按右上角開一個</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const ctx = item.context_used;
+          return (
+            <Pressable
+              style={({ pressed }) => [styles.card, { backgroundColor: pressed ? theme.surface : theme.card, borderColor: theme.border }]}
+              onPress={() => onOpen(item)}
+            >
+              <View style={[styles.avatar, { backgroundColor: avatarColor(item.name) }]}>
+                <Text style={styles.avatarText}>{item.name.slice(0, 1).toUpperCase()}</Text>
               </View>
-              <Text style={[styles.preview, { color: theme.muted }]} numberOfLines={2}>
-                {item.status === 'blocked' ? '正在等你確認' : item.preview?.text ?? item.title ?? ''}
-              </Text>
-              <View style={styles.meta}>
-                <View style={[styles.pill, { backgroundColor: statusColor[item.status] + '22' }]}>
-                  <View style={[styles.dot, { backgroundColor: statusColor[item.status] }]} />
-                  <Text style={[styles.pillText, { color: statusColor[item.status] }]}>{statusLabel[item.status]}</Text>
+              <View style={styles.body}>
+                <View style={styles.line}>
+                  <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={[styles.time, { color: theme.muted }]}>{formatTime(item.preview?.ts)}</Text>
                 </View>
-                {item.account && (
-                  <Text style={[styles.account, { color: theme.muted, borderColor: theme.border }]}>{item.account}</Text>
-                )}
-                {ctx != null && (
-                  <View style={styles.ctx}>
-                    <View style={[styles.meter, { backgroundColor: theme.border }]}>
-                      <View style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]} />
-                    </View>
-                    <Text style={[styles.ctxText, { color: theme.muted }]}>ctx {ctx}%</Text>
+                <Text style={[styles.preview, { color: theme.muted }]} numberOfLines={2}>
+                  {item.status === 'blocked' ? '正在等你確認' : item.preview?.text ?? item.title ?? ''}
+                </Text>
+                <View style={styles.meta}>
+                  <View style={[styles.pill, { backgroundColor: statusColor[item.status] + '22' }]}>
+                    <View style={[styles.dot, { backgroundColor: statusColor[item.status] }]} />
+                    <Text style={[styles.pillText, { color: statusColor[item.status] }]}>{statusLabel[item.status]}</Text>
                   </View>
-                )}
+                  {item.account && (
+                    <Text style={[styles.account, { color: theme.muted, borderColor: theme.border }]}>{item.account}</Text>
+                  )}
+                  {ctx != null && (
+                    <View style={styles.ctx}>
+                      <View style={[styles.meter, { backgroundColor: theme.border }]}>
+                        <View style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]} />
+                      </View>
+                      <Text style={[styles.ctxText, { color: theme.muted }]}>ctx {ctx}%</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          </Pressable>
-        );
-      }}
-    />
+            </Pressable>
+          );
+        }}
+      />
+      <SettingsSheet
+        visible={settings}
+        theme={theme}
+        server={server}
+        onClose={() => setSettings(false)}
+        onChange={onServerChange}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  list: { flex: 1 },
   content: { paddingHorizontal: 14, paddingBottom: 24, gap: 10 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 2 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 16 },
   headerTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

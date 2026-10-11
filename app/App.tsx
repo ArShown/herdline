@@ -36,7 +36,7 @@ export default function App() {
   } else if (open) {
     content = <ChatScreen server={server} contact={open} onBack={() => setOpen(null)} />;
   } else {
-    content = <ContactsScreen server={server} onOpen={setOpen} onLogout={logout} />;
+    content = <ContactsScreen server={server} onOpen={setOpen} onLogout={logout} onServerChange={setServer} />;
   }
 
   return (
