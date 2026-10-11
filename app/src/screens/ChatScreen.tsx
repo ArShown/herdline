@@ -7,7 +7,6 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,18 +15,23 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError, type Contact, type Message, type OutgoingFile, type Server, type Status } from '../api';
 import { AttachSheet } from '../AttachSheet';
 import { AuthImage } from '../AuthImage';
 import { Markdown } from '../Markdown';
 import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
+import { Sheet } from '../Sheet';
 import { ThinkingDots } from '../ThinkingDots';
 import { statusColor, statusLabel, useTheme } from '../theme';
 import { usePolling } from '../usePolling';
 
-// Keys the bridge accepts; enough to answer a confirmation dialog.
-const DIALOG_KEYS = ['1', '2', '3', 'enter', 'esc'];
+// Keys the bridge accepts; enough to move through a confirmation dialog and pick an option.
+const DIALOG_KEYS: { key: string; icon?: 'arrow-up' | 'arrow-down'; label?: string }[] = [
+  { key: 'up', icon: 'arrow-up' },
+  { key: 'down', icon: 'arrow-down' },
+  { key: 'enter', label: 'Enter' },
+  { key: 'esc', label: 'Esc' },
+];
 const MAX_ATTACHMENTS = 6;
 
 type Props = { server: Server; contact: Contact; onBack: () => void };
@@ -255,9 +259,9 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             <Text style={[styles.mono, { color: theme.text }]}>{screen}</Text>
           </ScrollView>
           <View style={styles.keys}>
-            {DIALOG_KEYS.map((key) => (
+            {DIALOG_KEYS.map(({ key, icon, label }) => (
               <Pressable key={key} style={[styles.key, { borderColor: theme.border }]} onPress={() => press(key)}>
-                <Text style={{ color: theme.text }}>{key === 'enter' ? 'Enter' : key === 'esc' ? 'Esc' : key}</Text>
+                {icon ? <Ionicons name={icon} size={18} color={theme.text} /> : <Text style={{ color: theme.text }}>{label}</Text>}
               </Pressable>
             ))}
             <Pressable style={[styles.key, { borderColor: theme.border }]} onPress={() => setScreen(null)}>
@@ -388,48 +392,44 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         </View>
       </View>
 
-      <Modal visible={menu} transparent animationType="slide" onRequestClose={() => setMenu(false)}>
-        <SafeAreaProvider>
-          <Pressable
-            style={styles.backdrop}
-            onPress={() => {
-              setMenu(false);
-              setConfirmBusy(false);
-            }}
-          />
-          <SafeAreaView edges={['bottom']} style={[styles.menu, { backgroundColor: theme.surface }]}>
-            <View style={[styles.handle, { backgroundColor: theme.border }]} />
-            <Pressable
-              style={[styles.menuItem, { backgroundColor: theme.bg }]}
-              onPress={() => {
-                setMenu(false);
-                showScreen();
-              }}
-            >
-              <Ionicons name="desktop-outline" size={20} color={theme.text} />
-              <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
-            </Pressable>
-            {confirmBusy ? (
-              <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
-                <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
-                <View style={styles.confirmRow}>
-                  <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmBusy(false)}>
-                    <Text style={{ color: theme.text }}>先不要</Text>
-                  </Pressable>
-                  <Pressable style={[styles.confirmButton, { backgroundColor: theme.danger, borderColor: theme.danger }]} onPress={() => exit(true)}>
-                    {exiting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>結束</Text>}
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <Pressable style={[styles.menuItem, { backgroundColor: theme.bg }]} disabled={exiting} onPress={() => exit(false)}>
-                {exiting ? <ActivityIndicator /> : <Ionicons name="exit-outline" size={20} color={theme.danger} />}
-                <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
+      <Sheet
+        visible={menu}
+        onClose={() => {
+          setMenu(false);
+          setConfirmBusy(false);
+        }}
+        style={[styles.menu, { backgroundColor: theme.surface }]}
+      >
+        <View style={[styles.handle, { backgroundColor: theme.border }]} />
+        <Pressable
+          style={[styles.menuItem, { backgroundColor: theme.bg }]}
+          onPress={() => {
+            setMenu(false);
+            showScreen();
+          }}
+        >
+          <Ionicons name="desktop-outline" size={20} color={theme.text} />
+          <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
+        </Pressable>
+        {confirmBusy ? (
+          <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+            <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
+            <View style={styles.confirmRow}>
+              <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={() => setConfirmBusy(false)}>
+                <Text style={{ color: theme.text }}>先不要</Text>
               </Pressable>
-            )}
-          </SafeAreaView>
-        </SafeAreaProvider>
-      </Modal>
+              <Pressable style={[styles.confirmButton, { backgroundColor: theme.danger, borderColor: theme.danger }]} onPress={() => exit(true)}>
+                {exiting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>結束</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable style={[styles.menuItem, { backgroundColor: theme.bg }]} disabled={exiting} onPress={() => exit(false)}>
+            {exiting ? <ActivityIndicator /> : <Ionicons name="exit-outline" size={20} color={theme.danger} />}
+            <Text style={[styles.menuText, { color: theme.danger }]}>結束對話</Text>
+          </Pressable>
+        )}
+      </Sheet>
       <AttachSheet
         visible={sheet}
         theme={theme}
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   screenScroll: { padding: 10 },
   mono: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 11 },
   keys: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 10 },
-  key: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  key: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, minWidth: 48, alignItems: 'center' },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingVertical: 12 },
   userRow: { alignItems: 'flex-end', gap: 6, marginVertical: 10 },
@@ -519,8 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   send: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: '#0006' },
-  menu: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, gap: 10 },
+  menu: { paddingHorizontal: 16, gap: 10 },
   handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: 6 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 15 },
   menuText: { fontSize: 16 },

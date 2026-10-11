@@ -3,18 +3,15 @@ import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError, type Server } from './api';
 import { saveServer } from './settings';
+import { Sheet } from './Sheet';
 import type { Theme } from './theme';
 
 type Props = {
@@ -76,99 +73,84 @@ export function SettingsSheet({ visible, theme, server, onClose, onChange }: Pro
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <SafeAreaProvider>
-        <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={styles.backdrop} onPress={close} />
-          <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.surface }]}>
-            <View style={[styles.handle, { backgroundColor: theme.border }]} />
-            <View style={styles.header}>
-              <Pressable onPress={close} hitSlop={10} style={[styles.close, { borderColor: theme.border }]}>
-                <Ionicons name="close" size={20} color={theme.text} />
-              </Pressable>
-              <Text style={[styles.title, { color: theme.text }]}>設定</Text>
-              <View style={styles.spacer} />
-            </View>
+    <Sheet visible={visible} onClose={close} style={[styles.body, { backgroundColor: theme.surface }]}>
+      <View style={[styles.handle, { backgroundColor: theme.border }]} />
+      <View style={styles.header}>
+        <Pressable onPress={close} hitSlop={10} style={[styles.close, { borderColor: theme.border }]}>
+          <Ionicons name="close" size={20} color={theme.text} />
+        </Pressable>
+        <Text style={[styles.title, { color: theme.text }]}>設定</Text>
+        <View style={styles.spacer} />
+      </View>
 
-            {row('電腦位址', server.url.replace(/^https?:\/\//, ''))}
-            {row('金鑰', `••••••${server.token.slice(-4)}`)}
+      {row('電腦位址', server.url.replace(/^https?:\/\//, ''))}
+      {row('金鑰', `••••••${server.token.slice(-4)}`)}
 
-            {editing ? (
-              <View style={styles.edit}>
-                <View style={styles.tokenRow}>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.bg, color: theme.text }]}
-                    placeholder="新的金鑰"
-                    placeholderTextColor={theme.muted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={token}
-                    onChangeText={setToken}
-                  />
-                  <Pressable onPress={paste} style={[styles.paste, { backgroundColor: theme.bg }]}>
-                    <Text style={{ color: theme.accent, fontWeight: '600' }}>貼上</Text>
-                  </Pressable>
-                </View>
-                {error && <Text style={{ color: theme.danger }}>{error}</Text>}
-                <View style={styles.actions}>
-                  <Pressable
-                    style={[styles.button, { borderColor: theme.border }]}
-                    onPress={() => {
-                      setEditing(false);
-                      setToken('');
-                      setError(null);
-                    }}
-                  >
-                    <Text style={{ color: theme.text }}>取消</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.button,
-                      {
-                        backgroundColor: theme.accent,
-                        borderColor: theme.accent,
-                        opacity: token.trim() && !busy ? 1 : 0.5,
-                      },
-                    ]}
-                    disabled={!token.trim() || busy}
-                    onPress={save}
-                  >
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>確認更新</Text>}
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <Pressable
-                style={[styles.row, styles.action, { backgroundColor: theme.bg }]}
-                onPress={() => {
-                  setEditing(true);
-                  setSaved(false);
-                }}
-              >
-                <Ionicons name="key-outline" size={18} color={theme.accent} />
-                <Text style={{ color: theme.accent, fontSize: 16 }}>更新金鑰</Text>
-              </Pressable>
-            )}
-            {saved && <Text style={{ color: theme.muted }}>金鑰已更新</Text>}
-          </SafeAreaView>
-        </KeyboardAvoidingView>
-      </SafeAreaProvider>
-    </Modal>
+      {editing ? (
+        <View style={styles.edit}>
+          <View style={styles.tokenRow}>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.bg, color: theme.text }]}
+              placeholder="新的金鑰"
+              placeholderTextColor={theme.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
+              value={token}
+              onChangeText={setToken}
+            />
+            <Pressable onPress={paste} style={[styles.paste, { backgroundColor: theme.bg }]}>
+              <Text style={{ color: theme.accent, fontWeight: '600' }}>貼上</Text>
+            </Pressable>
+          </View>
+          {error && <Text style={{ color: theme.danger }}>{error}</Text>}
+          <View style={styles.actions}>
+            <Pressable
+              style={[styles.button, { borderColor: theme.border }]}
+              onPress={() => {
+                setEditing(false);
+                setToken('');
+                setError(null);
+              }}
+            >
+              <Text style={{ color: theme.text }}>取消</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.button,
+                {
+                  backgroundColor: theme.accent,
+                  borderColor: theme.accent,
+                  opacity: token.trim() && !busy ? 1 : 0.5,
+                },
+              ]}
+              disabled={!token.trim() || busy}
+              onPress={save}
+            >
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>確認更新</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          style={[styles.row, styles.action, { backgroundColor: theme.bg }]}
+          onPress={() => {
+            setEditing(true);
+            setSaved(false);
+          }}
+        >
+          <Ionicons name="key-outline" size={18} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontSize: 16 }}>更新金鑰</Text>
+        </Pressable>
+      )}
+      {saved && <Text style={{ color: theme.muted }}>金鑰已更新</Text>}
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: '#0006' },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-    gap: 10,
-  },
+  body: { gap: 10 },
   handle: {
     alignSelf: 'center',
     width: 40,

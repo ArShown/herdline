@@ -55,23 +55,20 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
     }
   };
 
-  // Stays put while the cards scroll under it.
+  // Title and quota stay put while the cards scroll under them.
   const titleBar = (
-    <View style={[styles.header, { backgroundColor: theme.bg }]}>
-      <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
-      <View style={styles.actions}>
-        <Pressable onPress={() => setSettings(true)} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
-          <Ionicons name="settings-outline" size={18} color={theme.text} />
-        </Pressable>
-        <Pressable onPress={createSpace} disabled={creating} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.accent }]}>
-          {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={22} color="#fff" />}
-        </Pressable>
+    <View style={styles.top}>
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Spaces</Text>
+        <View style={styles.actions}>
+          <Pressable onPress={() => setSettings(true)} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.surface }]}>
+            <Ionicons name="settings-outline" size={18} color={theme.text} />
+          </Pressable>
+          <Pressable onPress={createSpace} disabled={creating} hitSlop={12} style={[styles.iconButton, { backgroundColor: theme.accent }]}>
+            {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={22} color="#fff" />}
+          </Pressable>
+        </View>
       </View>
-    </View>
-  );
-
-  const header = (
-    <View>
       {usage && (
         <View style={styles.usage}>
           {usage.split('│').map((part) => {
@@ -87,9 +84,10 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
           })}
         </View>
       )}
-      {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
     </View>
   );
+
+  const header = error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null;
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
@@ -171,13 +169,14 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  top: { paddingHorizontal: 14 },
   list: { flex: 1 },
   content: { paddingHorizontal: 14, paddingBottom: 24, gap: 10 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, paddingBottom: 6, paddingHorizontal: 2 },
   headerTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  usage: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 8 },
+  usage: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 8, paddingBottom: 12 },
   usageCard: { flexGrow: 1, minWidth: '22%', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, gap: 2 },
   usageLabel: { fontSize: 11 },
   usageValue: { fontSize: 16, fontWeight: '700' },
