@@ -26,6 +26,7 @@ import { loadDraft, saveDraft } from '../drafts';
 import { Markdown } from '../Markdown';
 import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
 import { Sheet } from '../Sheet';
+import { useBlockSwipeBack } from '../SwipeBack';
 import { ThinkingDots } from '../ThinkingDots';
 import { statusColor, statusLabel, useTheme } from '../theme';
 import { usePolling } from '../usePolling';
@@ -102,6 +103,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [exiting, setExiting] = useState(false);
   const room = MAX_ATTACHMENTS - picked.length - files.length;
+  useBlockSwipeBack(viewing != null || sheet || menu);
 
   const load = useCallback(async () => {
     try {
