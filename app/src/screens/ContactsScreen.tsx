@@ -160,12 +160,7 @@ export function ContactsScreen({ server, onOpen, onLogout, onServerChange }: Pro
                     <Text style={[styles.account, { color: theme.muted, borderColor: theme.border }]}>{item.account}</Text>
                   )}
                   {ctx != null && (
-                    <View style={styles.ctx}>
-                      <View style={[styles.meter, { backgroundColor: theme.border }]}>
-                        <View style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]} />
-                      </View>
-                      <Text style={[styles.ctxText, { color: theme.muted }]}>ctx {ctx}%</Text>
-                    </View>
+                    <Text style={[styles.ctxText, { color: theme.muted }]}>ctx {ctx}%</Text>
                   )}
                 </View>
               </View>
@@ -217,8 +212,5 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3 },
   pillText: { fontSize: 11, fontWeight: '600' },
   account: { fontSize: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  ctx: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
-  meter: { width: 44, height: 4, borderRadius: 2, overflow: 'hidden' },
-  meterFill: { height: 4, borderRadius: 2 },
-  ctxText: { fontSize: 11 },
+  ctxText: { fontSize: 11, marginLeft: 'auto' },
 });

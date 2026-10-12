@@ -421,11 +421,6 @@ export function ChatScreen({ server, contact, onBack }: Props) {
             {ctx != null && (
               <>
                 <Text style={[styles.subtitleText, { color: theme.muted }]}>·</Text>
-                <View style={[styles.meter, { backgroundColor: theme.border }]}>
-                  <View
-                    style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]}
-                  />
-                </View>
                 <Text style={[styles.subtitleText, { color: meterColor(`${ctx}%`, { ...theme, text: theme.muted }) }]}>
                   ctx {ctx}%
                 </Text>
@@ -887,8 +882,6 @@ const styles = StyleSheet.create({
   inputCommand: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 15 },
   runPreview: { borderRadius: 10, padding: 12 },
   agentsButton: { marginRight: 4 },
-  meter: { width: 28, height: 4, borderRadius: 2, overflow: 'hidden' },
-  meterFill: { height: 4, borderRadius: 2 },
   menuHint: { marginLeft: 'auto', fontSize: 13 },
   nameInput: { fontSize: 16, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14 },

@@ -93,6 +93,27 @@ function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
+const CELL_MIN = 72;
+const CELL_MAX = 220;
+const CELL_PADDING = 18;
+
+/** Rough rendered width of a cell at 14px: wide (CJK, full-width) characters count about twice as wide. */
+function textWidth(text: string): number {
+  const plain = text.replace(/\*\*|__|`|\[([^\]]+)\]\([^)]*\)/g, '$1');
+  let width = 0;
+  for (const ch of plain) width += ch.codePointAt(0)! >= 0x2e80 ? 14.5 : 8.5;
+  return width;
+}
+
+/** One width per column, so cells in the same column line up across rows. */
+function columnWidths(rows: string[][]): number[] {
+  const count = Math.max(...rows.map((row) => row.length));
+  return Array.from({ length: count }, (_, c) => {
+    const widest = Math.max(0, ...rows.map((row) => textWidth(row[c] ?? '')));
+    return Math.round(Math.min(CELL_MAX, Math.max(CELL_MIN, widest + CELL_PADDING)));
+  });
+}
+
 /** A suggested "!" command (one line), or null. */
 export function commandIn(code: string): string | null {
   const match = code.trim().match(/^!\s*([^\n]+)$/);
@@ -197,19 +218,29 @@ export function Markdown({ text, theme, onRun }: { text: string; theme: Theme; o
                 </Text>
               </View>
             );
-          case 'table':
+          case 'table': {
+            const widths = columnWidths(block.rows);
             return (
               <ScrollView key={i} horizontal>
                 <View style={[styles.table, { borderColor: theme.border }]}>
                   {block.rows.map((row, r) => (
-                    <View key={r} style={[styles.tableRow, { borderColor: theme.border }]}>
-                      {row.map((cell, c) => (
+                    <View
+                      key={r}
+                      style={[styles.tableRow, r < block.rows.length - 1 && styles.tableRowDivider, { borderColor: theme.border }]}
+                    >
+                      {widths.map((width, c) => (
                         <Text
                           key={c}
                           selectable
-                          style={[base, styles.tableCell, r === 0 && styles.bold, { borderColor: theme.border }]}
+                          style={[
+                            base,
+                            styles.tableCell,
+                            r === 0 && styles.bold,
+                            c < widths.length - 1 && styles.tableCellDivider,
+                            { width, borderColor: theme.border },
+                          ]}
                         >
-                          {inline(cell, theme, onRun)}
+                          {inline(row[c] ?? '', theme, onRun)}
                         </Text>
                       ))}
                     </View>
@@ -217,6 +248,7 @@ export function Markdown({ text, theme, onRun }: { text: string; theme: Theme; o
                 </View>
               </ScrollView>
             );
+          }
           case 'rule':
             return <View key={i} style={[styles.rule, { backgroundColor: theme.border }]} />;
           default:
@@ -257,8 +289,10 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: 'row', gap: 8 },
   marker: { minWidth: 16 },
   quote: { borderLeftWidth: 3, paddingLeft: 10 },
-  table: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
-  tableRow: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
-  tableCell: { minWidth: 90, maxWidth: 220, padding: 8, fontSize: 14, lineHeight: 20, borderRightWidth: StyleSheet.hairlineWidth },
+  table: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, overflow: 'hidden' },
+  tableRow: { flexDirection: 'row' },
+  tableRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth },
+  tableCell: { padding: 8, fontSize: 14, lineHeight: 20 },
+  tableCellDivider: { borderRightWidth: StyleSheet.hairlineWidth },
   rule: { height: StyleSheet.hairlineWidth, marginVertical: 4 },
 });
