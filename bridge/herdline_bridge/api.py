@@ -32,6 +32,7 @@ IMAGE_REGISTRY_SIZE = 500
 ALLOWED_KEYS = {'enter', 'esc', 'up', 'down', 'tab', 'y', 'n', *map(str, range(1, 10))}
 # A "!" command goes in only between turns, like typing it at the computer.
 RUNNABLE_STATUSES = {'idle', 'done'}
+MAX_NAME_LENGTH = 60
 
 
 class Binary:
@@ -84,6 +85,10 @@ class Api:
             return 200, {'agents': agents_mod.overview(path, self.herdr.agents(), contact.workspace_id)}
         if route == ('POST', 'run'):
             return self.run(contact, (body or {}).get('command', ''))
+        if route == ('POST', 'compact'):
+            return self.compact(contact)
+        if route == ('POST', 'rename'):
+            return self.rename(contact, (body or {}).get('name', ''))
         if route == ('GET', 'screen'):
             return 200, {'text': self.herdr.screen(contact.pane)}
         if route == ('POST', 'keys'):
@@ -143,6 +148,7 @@ class Api:
         return {
             'status': contact.status,
             'session_id': contact.session_id,
+            'context_used': contacts_mod.context_used(self.config, contact.session_id),
             'account': self.config.account_of(path),
             'messages': [self._public(m, contact.session_id) for m in found],
             'has_more': more,
@@ -250,6 +256,24 @@ class Api:
         except HerdrError as e:
             return 409, {'error': e.code, 'message': str(e)}
         return 202, {'accepted': True, 'session_id': contact.session_id}
+
+    def compact(self, contact) -> tuple[int, dict]:
+        """Compact the conversation, as typing /compact at the computer; only between turns."""
+        if contact.status not in RUNNABLE_STATUSES:
+            return 409, {'error': 'agent_blocked' if contact.status == 'blocked' else 'busy'}
+        try:
+            self.herdr.prompt(contact.pane, '/compact')
+        except HerdrError as e:
+            return 409, {'error': e.code, 'message': str(e)}
+        return 202, {'accepted': True, 'session_id': contact.session_id}
+
+    def rename(self, contact, name: str) -> tuple[int, dict]:
+        """Rename the conversation: the space's label, which the list and herdr both show."""
+        name = (name or '').strip()
+        if not name or '\n' in name or '\r' in name or len(name) > MAX_NAME_LENGTH:
+            return 400, {'error': 'bad_name'}
+        self.herdr.rename_workspace(contact.workspace_id, name)
+        return 200, {'name': self.config.aliases.get(name, name)}
 
     def keys(self, contact, keys: list[str]) -> tuple[int, dict]:
         if not keys or any(k not in ALLOWED_KEYS for k in keys):

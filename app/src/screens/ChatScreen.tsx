@@ -38,7 +38,7 @@ import { MarkupViewer, type ImageSource, type Marked } from '../MarkupViewer';
 import { Sheet } from '../Sheet';
 import { useBlockSwipeBack } from '../SwipeBack';
 import { ThinkingDots } from '../ThinkingDots';
-import { statusColor, statusLabel, useTheme } from '../theme';
+import { meterColor, statusColor, statusLabel, useTheme } from '../theme';
 import { markSeen } from '../unread';
 import { usePolling } from '../usePolling';
 
@@ -91,6 +91,8 @@ export function ChatScreen({ server, contact, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>(contact.status);
   const [account, setAccount] = useState<string | null>(contact.account ?? null);
+  const [name, setName] = useState(contact.name);
+  const [ctx, setCtx] = useState<number | null>(contact.context_used);
   const insets = useSafeAreaInsets();
   const [initial] = useState(() => loadDraft(contact.id));
   const [draft, setDraft] = useState(initial.text);
@@ -113,6 +115,13 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     if (width && height && sizes[key]?.width !== width) setSizes((s) => ({ ...s, [key]: { width, height } }));
   };
   const [menu, setMenu] = useState(false);
+  // What the menu sheet shows instead of its list; kept in the same sheet, since iOS drops a second modal opened right after one closes.
+  const [menuView, setMenuView] = useState<'compact' | 'rename' | null>(null);
+  const [newName, setNewName] = useState('');
+  const [menuBusy, setMenuBusy] = useState(false);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  // When a compact was asked for; cleared once its divider shows up.
+  const [compactingSince, setCompactingSince] = useState<number | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [exiting, setExiting] = useState(false);
   // A command Claude suggested, waiting for the person to confirm it.
@@ -146,6 +155,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
       }
       setStatus(data.status);
       setAccount(data.account);
+      setCtx(data.context_used);
       setError(null);
     } catch {
       setError('連不上電腦');
@@ -164,6 +174,19 @@ export function ChatScreen({ server, contact, onBack }: Props) {
     const arrived = messages.some((m) => m.role === 'user' && Date.parse(m.ts) >= pending.sentAt - 5_000);
     if (arrived) setPending(null);
   }, [messages, pending, sending]);
+
+  useEffect(() => {
+    if (compactingSince == null) return;
+    const done = messages.some((m) => m.kind === 'compact' && Date.parse(m.ts) >= compactingSince - 5_000);
+    if (done) setCompactingSince(null);
+  }, [messages, compactingSince]);
+
+  // A compact can take a few minutes; past that, stop saying so.
+  useEffect(() => {
+    if (compactingSince == null) return;
+    const timer = setTimeout(() => setCompactingSince(null), 5 * 60_000);
+    return () => clearTimeout(timer);
+  }, [compactingSince]);
 
   // In case the phone and computer clocks disagree, do not keep the placeholder forever.
   useEffect(() => {
@@ -280,11 +303,54 @@ export function ChatScreen({ server, contact, onBack }: Props) {
 
   const showScreen = async () => setScreen(await api.screen(server, contact.id));
 
+  const closeMenu = () => {
+    setMenu(false);
+    setMenuView(null);
+    setMenuError(null);
+    setConfirmBusy(false);
+  };
+
+  const compact = async () => {
+    setMenuBusy(true);
+    try {
+      await api.compact(server, contact.id);
+      closeMenu();
+      setCompactingSince(Date.now());
+      setStatus('working');
+      setTimeout(load, 1_000);
+    } catch (e) {
+      setMenuError(
+        e instanceof ApiError && e.code === 'busy'
+          ? '他還在做事，等他停下來再壓縮'
+          : e instanceof ApiError && e.code === 'agent_blocked'
+            ? '正在等你確認，先處理畫面上的問題'
+            : '沒辦法壓縮，連不上電腦',
+      );
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  const rename = async () => {
+    const wanted = newName.trim();
+    if (!wanted || menuBusy) return;
+    if (wanted === name) return closeMenu();
+    setMenuBusy(true);
+    try {
+      setName(await api.rename(server, contact.id, wanted));
+      closeMenu();
+    } catch (e) {
+      setMenuError(e instanceof ApiError && e.code === 'bad_name' ? '名稱不能空白、不能換行，最多 60 字' : '改不了名，連不上電腦');
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
   const exit = async (force: boolean) => {
     setExiting(true);
     try {
       await api.exit(server, contact.id, force);
-      setMenu(false);
+      closeMenu();
       onBack();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'busy') setConfirmBusy(true);
@@ -344,7 +410,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
-            {contact.name}
+            {name}
           </Text>
           <View style={styles.subtitle}>
             <View style={[styles.statusDot, { backgroundColor: statusColor[status] }]} />
@@ -352,6 +418,19 @@ export function ChatScreen({ server, contact, onBack }: Props) {
               {statusLabel[status]}
               {account ? `  ·  ${account}` : ''}
             </Text>
+            {ctx != null && (
+              <>
+                <Text style={[styles.subtitleText, { color: theme.muted }]}>·</Text>
+                <View style={[styles.meter, { backgroundColor: theme.border }]}>
+                  <View
+                    style={[styles.meterFill, { width: `${Math.min(ctx, 100)}%`, backgroundColor: meterColor(`${ctx}%`, theme) }]}
+                  />
+                </View>
+                <Text style={[styles.subtitleText, { color: meterColor(`${ctx}%`, { ...theme, text: theme.muted }) }]}>
+                  ctx {ctx}%
+                </Text>
+              </>
+            )}
           </View>
         </View>
         <Pressable onPress={() => setAgentsOpen(true)} hitSlop={10} style={styles.agentsButton}>
@@ -413,7 +492,9 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          status === 'working' && !sending ? <ThinkingDots color={theme.muted} label="思考中" /> : null
+          status === 'working' && !sending ? (
+            <ThinkingDots color={theme.muted} label={compactingSince != null ? '壓縮中' : '思考中'} />
+          ) : null
         }
         keyExtractor={(m, i) => m.id ?? String(i)}
         renderItem={({ item }) =>
@@ -438,6 +519,12 @@ export function ChatScreen({ server, contact, onBack }: Props) {
                 </View>
               )}
               <Text style={[styles.pendingText, { color: theme.muted }]}>{sending ? '傳送中…' : '已送出'}</Text>
+            </View>
+          ) : item.kind === 'compact' ? (
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.dividerText, { color: theme.muted }]}>{item.text}</Text>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
             </View>
           ) : item.kind === 'command' ? (
             <View style={[styles.command, { backgroundColor: theme.code, borderColor: theme.border }]}>
@@ -530,7 +617,7 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         )}
         <TextInput
           style={[styles.input, { color: theme.text }, commandMode && styles.inputCommand]}
-          placeholder={`回覆 ${contact.name}`}
+          placeholder={`回覆 ${name}`}
           placeholderTextColor={theme.muted}
           multiline
           autoCapitalize={commandMode ? 'none' : 'sentences'}
@@ -556,26 +643,98 @@ export function ChatScreen({ server, contact, onBack }: Props) {
         </View>
       </View>
 
-      <Sheet
-        visible={menu}
-        onClose={() => {
-          setMenu(false);
-          setConfirmBusy(false);
-        }}
-        style={[styles.menu, { backgroundColor: theme.surface }]}
-      >
+      <Sheet visible={menu} onClose={closeMenu} style={[styles.menu, { backgroundColor: theme.surface }]}>
         <View style={[styles.handle, { backgroundColor: theme.border }]} />
-        <Pressable
-          style={[styles.menuItem, { backgroundColor: theme.bg }]}
-          onPress={() => {
-            setMenu(false);
-            showScreen();
-          }}
-        >
-          <Ionicons name="desktop-outline" size={20} color={theme.text} />
-          <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
-        </Pressable>
-        {confirmBusy ? (
+        {menuView === 'compact' ? (
+          <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+            <Text style={{ color: theme.text, fontSize: 15 }}>
+              把前面的對話濃縮成摘要，騰出空間{ctx != null ? `（現在用了 ${ctx}%）` : ''}。壓縮後，前面的細節他會記得比較模糊。
+            </Text>
+            {menuError && <Text style={{ color: theme.danger }}>{menuError}</Text>}
+            <View style={styles.confirmRow}>
+              <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={closeMenu}>
+                <Text style={{ color: theme.text }}>先不要</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmButton, { backgroundColor: theme.accent, borderColor: theme.accent }]}
+                disabled={menuBusy}
+                onPress={compact}
+              >
+                {menuBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>壓縮</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : menuView === 'rename' ? (
+          <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
+            <Text style={{ color: theme.text, fontSize: 15 }}>對話名稱</Text>
+            <TextInput
+              style={[styles.nameInput, { color: theme.text, borderColor: theme.border }]}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+              selectTextOnFocus
+              maxLength={60}
+              returnKeyType="done"
+              onSubmitEditing={rename}
+            />
+            {menuError && <Text style={{ color: theme.danger }}>{menuError}</Text>}
+            <View style={styles.confirmRow}>
+              <Pressable style={[styles.confirmButton, { borderColor: theme.border }]} onPress={closeMenu}>
+                <Text style={{ color: theme.text }}>取消</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.confirmButton,
+                  newName.trim()
+                    ? { backgroundColor: theme.accent, borderColor: theme.accent }
+                    : { backgroundColor: theme.border, borderColor: theme.border },
+                ]}
+                disabled={menuBusy || !newName.trim()}
+                onPress={rename}
+              >
+                {menuBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>儲存</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <>
+            <Pressable
+              style={[styles.menuItem, { backgroundColor: theme.bg }]}
+              onPress={() => {
+                closeMenu();
+                showScreen();
+              }}
+            >
+              <Ionicons name="desktop-outline" size={20} color={theme.text} />
+              <Text style={[styles.menuText, { color: theme.text }]}>看電腦畫面</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.menuItem, { backgroundColor: theme.bg }]}
+              onPress={() => {
+                setNewName(name);
+                setMenuError(null);
+                setMenuView('rename');
+              }}
+            >
+              <Ionicons name="create-outline" size={20} color={theme.text} />
+              <Text style={[styles.menuText, { color: theme.text }]}>重新命名</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.menuItem, { backgroundColor: theme.bg }]}
+              onPress={() => {
+                setMenuError(null);
+                setMenuView('compact');
+              }}
+            >
+              <Ionicons name="contract-outline" size={20} color={theme.text} />
+              <Text style={[styles.menuText, { color: theme.text }]}>壓縮對話</Text>
+              {ctx != null && (
+                <Text style={[styles.menuHint, { color: meterColor(`${ctx}%`, { ...theme, text: theme.muted }) }]}>ctx {ctx}%</Text>
+              )}
+            </Pressable>
+          </>
+        )}
+        {menuView ? null : confirmBusy ? (
           <View style={[styles.confirm, { backgroundColor: theme.bg }]}>
             <Text style={{ color: theme.text, fontSize: 15 }}>他還在做事，現在結束會中斷。確定要結束嗎？</Text>
             <View style={styles.confirmRow}>
@@ -728,6 +887,13 @@ const styles = StyleSheet.create({
   inputCommand: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 15 },
   runPreview: { borderRadius: 10, padding: 12 },
   agentsButton: { marginRight: 4 },
+  meter: { width: 28, height: 4, borderRadius: 2, overflow: 'hidden' },
+  meterFill: { height: 4, borderRadius: 2 },
+  menuHint: { marginLeft: 'auto', fontSize: 13 },
+  nameInput: { fontSize: 16, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerText: { fontSize: 12 },
   badge: {
     position: 'absolute',
     top: -5,

@@ -200,6 +200,52 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(web['context_used'], 42)
         self.assertEqual(web['status'], 'blocked')
 
+    def test_chat_shows_context(self):
+        (self.config.context_dir / 's-web.json').write_text('{"used_percentage": 57}')
+        _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
+        self.assertEqual(body['context_used'], 57)
+        _, body = self.api.handle('GET', '/api/contacts/w1/messages', {}, None)
+        self.assertIsNone(body['context_used'])
+
+    def test_compact_only_between_turns(self):
+        status, _ = self.api.handle('POST', '/api/contacts/w1/compact', {}, None)
+        self.assertEqual(status, 202)
+        self.herdr._agents[0]['agent_status'] = 'working'
+        status, body = self.api.handle('POST', '/api/contacts/w1/compact', {}, None)
+        self.assertEqual((status, body['error']), (409, 'busy'))
+        status, body = self.api.handle('POST', '/api/contacts/w2/compact', {}, None)
+        self.assertEqual((status, body['error']), (409, 'agent_blocked'))
+        self.assertEqual(self.herdr.prompts, [('w1:p1', '/compact')])
+
+    def test_compact_marker_shows_in_chat_but_is_not_a_reply(self):
+        self.write_transcript('s-web', [
+            entry('assistant', [{'type': 'text', 'text': 'before'}], 'a-01'),
+            entry('user', '/compact', 'u-01'),
+            json.dumps({'type': 'system', 'subtype': 'compact_boundary', 'uuid': 'c-02',
+                        'timestamp': '2026-10-10T00:00:02Z', 'compactMetadata': {'trigger': 'manual'}}),
+            entry('user', 'This session is being continued', 'u-03', isCompactSummary=True),
+            json.dumps({'type': 'system', 'subtype': 'compact_boundary', 'uuid': 'c-04',
+                        'timestamp': '2026-10-10T00:00:04Z', 'compactMetadata': {'trigger': 'auto'}}),
+        ])
+        _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
+        self.assertEqual([(m['role'], m.get('kind'), m['text']) for m in body['messages']], [
+            ('assistant', None, 'before'), ('user', 'compact', '對話已壓縮'), ('user', 'compact', '對話已自動壓縮')])
+        web = next(c for c in self.api.list_contacts() if c['id'] == 'w2')
+        self.assertEqual((web['preview']['role'], web['preview']['text']), ('user', '對話已自動壓縮'))
+
+    def test_rename_changes_the_space_label(self):
+        status, body = self.api.handle('POST', '/api/contacts/w2/rename', {}, {'name': '  前台  '})
+        self.assertEqual((status, body['name']), (200, '前台'))
+        self.assertEqual(self.herdr.renamed, [('w2', '前台')])
+        _, body = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertIn('前台', [c['name'] for c in body['contacts']])
+        status, body = self.api.handle('POST', '/api/contacts/w1/rename', {}, {'name': 'proj_api'})
+        self.assertEqual(body['name'], 'API')
+        for name in ['', '   ', 'a\nb', 'x' * 61]:
+            status, body = self.api.handle('POST', '/api/contacts/w2/rename', {}, {'name': name})
+            self.assertEqual((status, body['error']), (400, 'bad_name'), name)
+        self.assertEqual(len(self.herdr.renamed), 2)
+
     def test_blocked_session_rejects_prompt(self):
         self.herdr.blocked.add('w2:p1')
         status, body = self.api.handle('POST', '/api/contacts/w2/messages', {}, {'text': 'hi'})

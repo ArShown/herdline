@@ -106,6 +106,11 @@ def _command_of(entry: dict, text: str) -> dict | None:
 
 def to_message(entry: dict) -> dict | None:
     kind = entry.get('type')
+    if kind == 'system' and entry.get('subtype') == 'compact_boundary':
+        # Shown as a divider; role "user" so it never counts as a new reply.
+        trigger = (entry.get('compactMetadata') or {}).get('trigger')
+        return {'id': entry.get('uuid'), 'role': 'user', 'kind': 'compact', 'ts': entry.get('timestamp'),
+                'text': '對話已自動壓縮' if trigger == 'auto' else '對話已壓縮', 'images': [], 'files': []}
     # isCompactSummary: the summary Claude Code injects after compacting, not something the user said.
     if kind not in ('user', 'assistant') or entry.get('isMeta') or entry.get('isCompactSummary'):
         return None
@@ -119,7 +124,8 @@ def to_message(entry: dict) -> dict | None:
         if command:
             return command
     # Slash-command echoes and harness notices are not part of the conversation.
-    if text.startswith('<'):
+    # A compact is logged as a bare "/compact" turn too; the divider after it already shows it.
+    if text.startswith('<') or (kind == 'user' and text.split(' ', 1)[0] == '/compact'):
         return None
     if kind == 'user' and not _typed_by_person(entry, text):
         return None

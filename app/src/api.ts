@@ -7,8 +7,8 @@ export type Message = {
   ts: string;
   images?: string[];
   files?: string[];
-  /** A shell command run in the session ("!" at the computer); `text` is the command. */
-  kind?: 'command';
+  /** A shell command run in the session ("!" at the computer); `text` is the command. `compact` marks where the conversation was compacted. */
+  kind?: 'command' | 'compact';
   output?: string;
 };
 
@@ -72,7 +72,14 @@ export const api = {
   contacts: (s: Server, signal?: AbortSignal) =>
     call<{ contacts: Contact[]; usage: string | null; away?: boolean }>(s, 'GET', '/api/contacts', undefined, signal),
   messages: (s: Server, id: string, before?: string, limit = 50) =>
-    call<{ status: Status; session_id: string; account: string | null; messages: Message[]; has_more: boolean }>(
+    call<{
+      status: Status;
+      session_id: string;
+      context_used: number | null;
+      account: string | null;
+      messages: Message[];
+      has_more: boolean;
+    }>(
       s,
       'GET',
       `${contactPath(id)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
@@ -82,6 +89,9 @@ export const api = {
   agents: (s: Server, id: string) =>
     call<{ agents: DispatchedAgent[] }>(s, 'GET', `${contactPath(id)}/agents`).then((d) => d.agents),
   run: (s: Server, id: string, command: string) => call(s, 'POST', `${contactPath(id)}/run`, { command }),
+  compact: (s: Server, id: string) => call(s, 'POST', `${contactPath(id)}/compact`, {}),
+  rename: (s: Server, id: string, name: string) =>
+    call<{ name: string }>(s, 'POST', `${contactPath(id)}/rename`, { name }).then((d) => d.name),
   screen: (s: Server, id: string) => call<{ text: string }>(s, 'GET', `${contactPath(id)}/screen`).then((d) => d.text),
   keys: (s: Server, id: string, keys: string[]) => call(s, 'POST', `${contactPath(id)}/keys`, { keys }),
   exit: (s: Server, id: string, force = false) => call(s, 'POST', `${contactPath(id)}/exit`, { force }),
