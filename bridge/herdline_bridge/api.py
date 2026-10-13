@@ -132,6 +132,8 @@ class Api:
                 'account': self.config.account_of(path),
                 'preview': self._public(last[-1], with_images=False) if last else None,
             })
+        # Latest conversation first, like a chat app; ones with no messages yet go last.
+        rows.sort(key=lambda r: (r['preview'] or {}).get('ts') or '', reverse=True)
         return rows
 
     def messages(self, contact, limit: int, before: str | None = None) -> dict:

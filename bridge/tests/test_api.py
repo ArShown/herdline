@@ -116,6 +116,12 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([c['name'] for c in body['contacts']], ['API', 'proj_web'])
 
+    def test_contacts_latest_conversation_first(self):
+        self.write_transcript('s-old', [entry('user', 'hi', 'u-01')])
+        self.write_transcript('s-web', [entry('user', 'hi', 'u-05')])
+        _, body = self.api.handle('GET', '/api/contacts', {}, None)
+        self.assertEqual([c['name'] for c in body['contacts']], ['proj_web', 'API'])
+
     def test_away_flag_follows_the_file(self):
         _, body = self.api.handle('GET', '/api/contacts', {}, None)
         self.assertFalse(body['away'])
