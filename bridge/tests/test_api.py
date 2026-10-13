@@ -137,6 +137,14 @@ class ApiTest(unittest.TestCase):
         self.api.handle('POST', '/api/contacts/w1/messages', {}, {'text': 'hello'})
         self.assertEqual(self.herdr.prompts, [('w1:p2', 'hello')])
 
+    def test_conversation_continued_in_a_new_session_is_followed(self):
+        self.write_transcript('s-web', [entry('user', 'old', 'u-01'),
+                                        json.dumps({'type': 'continued-in', 'continuedInSessionId': 's-web2'})])
+        self.write_transcript('s-web2', [entry('user', 'new', 'u-02')])
+        _, body = self.api.handle('GET', '/api/contacts/w2/messages', {}, None)
+        self.assertEqual(body['session_id'], 's-web2')
+        self.assertEqual([m['id'] for m in body['messages']], ['u-02'])
+
     def test_messages_keep_chat_only(self):
         record_handoff(self.config, 's-old', 's-new')
         self.write_transcript('s-new', [

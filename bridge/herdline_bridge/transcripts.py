@@ -202,6 +202,27 @@ def before(path: Path, message_id: str, limit: int = 50) -> tuple[list[dict], bo
     return messages[max(0, index - limit):index], index > limit or read < size
 
 
+def continued_in(path: Path | None) -> str | None:
+    """The session this one went on in, if Claude moved the conversation to a new transcript."""
+    try:
+        with path.open('rb') as f:
+            size = f.seek(0, os.SEEK_END)
+            f.seek(max(0, size - CHUNK))
+            lines = f.read().split(b'\n')
+    except (OSError, AttributeError):
+        return None
+    for line in reversed(lines):
+        if b'continued-in' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get('type') == 'continued-in':
+            return entry.get('continuedInSessionId')
+    return None
+
+
 def mtime(path: Path | None) -> float:
     try:
         return os.stat(path).st_mtime if path else 0.0

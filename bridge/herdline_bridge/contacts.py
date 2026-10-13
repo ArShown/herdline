@@ -50,6 +50,17 @@ def _on_duty(agents: list[dict], successors: dict[str, str], config: Config) -> 
         transcripts.find(config.config_dirs, a['agent_session']['value'])))
 
 
+def _latest(config: Config, session_id: str) -> str:
+    """Follow the conversation when Claude carried it on in a new session; herdr keeps the old id."""
+    seen = {session_id}
+    while True:
+        nxt = transcripts.continued_in(transcripts.find(config.config_dirs, session_id))
+        if not nxt or nxt in seen or not transcripts.find(config.config_dirs, nxt):
+            return session_id
+        seen.add(nxt)
+        session_id = nxt
+
+
 def resolve_all(herdr: Herdr, config: Config) -> list[Contact]:
     labels = {w['workspace_id']: w.get('label') or w['workspace_id'] for w in herdr.workspaces()}
     by_workspace: dict[str, list[dict]] = {}
@@ -70,7 +81,7 @@ def resolve_all(herdr: Herdr, config: Config) -> list[Contact]:
             id=workspace_id,
             name=config.aliases.get(label, label),
             workspace_id=workspace_id,
-            session_id=agent['agent_session']['value'],
+            session_id=_latest(config, agent['agent_session']['value']),
             pane=agent['pane_id'],
             status=agent.get('agent_status', 'unknown'),
             title=agent.get('terminal_title_stripped'),
